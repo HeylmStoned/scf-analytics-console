@@ -37,7 +37,7 @@ export type PageRow = {
   duration?: number;
   tenantId: string;
   views: number;
-  visitors: number;
+  visitors: number | null;
 };
 export type ApiRow = {
   service: string;
@@ -75,6 +75,10 @@ export type SiteStats = {
 export type LiveProject = {
   views: number;
   visitors: number;
+  visits: number;
+  bounces: number;
+  alternateDomain: boolean;
+  extra: { label: string; rows: Named[] }[];
   bounce: number;
   duration: number;
   pages: PageRow[];
@@ -113,6 +117,7 @@ export type AppState = {
   mode: "" | "public" | "scf" | "tenant";
   gateStep: "modes" | "tenant";
   tenantId: string;
+  betaConfigured: boolean;
   roster: { tenants: { id: string; token: string }[]; operatorToken: string } | null;
   view: string;
   range: RangeKey;
@@ -182,8 +187,8 @@ type Profile = {
 
 export const PROFILES: Record<string, Profile> = {
   alpha: {
-    name: "Northwind",
-    detail: "Wallet and payments",
+    name: "scf-umami-poc-production.up.railway.app",
+    detail: "Analytics demo",
     hue: "lavender",
     pageviews: 48210,
     visitors: 19440,
@@ -244,7 +249,7 @@ export const PROFILES: Record<string, Profile> = {
     ],
   },
   beta: {
-    name: "Harbor",
+    name: "Lend.xyz",
     detail: "Markets",
     hue: "coral",
     pageviews: 30110,
@@ -305,13 +310,14 @@ export const PROFILES: Record<string, Profile> = {
   },
 };
 
-export function createState(): AppState {
+export function createState(betaConfigured = false): AppState {
   return {
     token: "",
     role: "",
     mode: "",
     gateStep: "modes",
     tenantId: "",
+    betaConfigured,
     roster: null,
     view: "overview",
     range: "30d",
@@ -480,7 +486,7 @@ export function stats(state: AppState, id: string, range: RangeKey = state.range
     os: shareRows(profile.os, visitors),
     delta: profile.delta,
   };
-  const live = state.umami?.[id];
+  const live = range === state.range ? state.umami?.[id] : undefined;
   if (!live) return built;
   const webOff = streamOff(state, id, "web", range);
   const zeros = () => Array.from({ length: (live.seriesViews || []).length }, () => 0);
@@ -499,18 +505,22 @@ export function stats(state: AppState, id: string, range: RangeKey = state.range
     browsers: webOff ? live.browsers.map((row) => ({ ...row, count: 0 })) : live.browsers,
     os: webOff ? live.os.map((row) => ({ ...row, count: 0 })) : live.os,
     delta: {
-      pageviews: preferDelta(live.delta.pageviews, built.delta.pageviews),
-      visitors: preferDelta(live.delta.visitors, built.delta.visitors),
-      bounce: preferDelta(live.delta.bounce, built.delta.bounce),
-      duration: preferDelta(live.delta.duration, built.delta.duration),
+      ...live.delta,
       requests: built.delta.requests,
       errors: built.delta.errors,
     },
   };
 }
 
-function preferDelta(live: number, fallback: number) {
-  return Number.isFinite(live) && Math.abs(live) >= 0.0005 && Math.abs(live) <= 2 ? live : fallback;
+export function availableProject(state: AppState, id: string) {
+  return Boolean(PROFILES[id]) && (id !== "beta" || state.betaConfigured);
+}
+
+export function liveSites(state: AppState, ids: string[]) {
+  return ids.flatMap((id) => {
+    const site = state.umami?.[id];
+    return site && !streamOff(state, id, "web", state.range) ? [site] : [];
+  });
 }
 
 export function listingOf(state: AppState, id: string) {
@@ -521,9 +531,9 @@ export function listingOf(state: AppState, id: string) {
 }
 export function scopeIds(state: AppState) {
   if (state.role === "operator" || state.role === "public") {
-    return (state.roster?.tenants || []).map((tenant) => tenant.id).filter((id) => PROFILES[id] && listingOf(state, id) === "listed");
+    return (state.roster?.tenants || []).map((tenant) => tenant.id).filter((id) => availableProject(state, id) && listingOf(state, id) === "listed");
   }
-  return state.tenantId ? [state.tenantId] : [];
+  return availableProject(state, state.tenantId) ? [state.tenantId] : [];
 }
 
 export function isOperator(state: AppState) {
@@ -543,7 +553,7 @@ export function merged(state: AppState, ids: string[], key: "referrers" | "count
 export function headline(state: AppState, ids: string[]) {
   const parts = ids.map((id) => stats(state, id));
   const empty = {
-    views: 0, visitors: 0, requests: 0, errors: 0, client: 0, bounce: 0, duration: 0, p50: null as number | null, p95: null as number | null, errorRate: 0,
+    views: 0, visitors: 0, visits: null as number | null, bounces: null as number | null, requests: 0, errors: 0, client: 0, bounce: 0, duration: 0, p50: null as number | null, p95: null as number | null, errorRate: 0,
     delta: { pageviews: 0, visitors: 0, bounce: 0, duration: 0, requests: 0, errors: 0 },
   };
   if (!parts.length) return empty;
@@ -552,16 +562,24 @@ export function headline(state: AppState, ids: string[]) {
   const requests = sum(parts, (part) => part.requests);
   const errors = sum(parts, (part) => part.errors);
   const client = sum(parts, (part) => part.client);
-  const bounce = views ? sum(parts, (part) => part.bounce * part.views) / views : 0;
-  const visit = visitors ? sum(parts, (part) => part.duration * part.visitors) / visitors : 0;
+  const live = liveSites(state, ids);
+  const visits = live.length === ids.length ? sum(live, (site) => site.visits) : null;
+  const bounces = visits == null ? null : sum(live, (site) => site.bounces);
+  const bounce = visits == null
+    ? views ? sum(parts, (part) => part.bounce * part.views) / views : 0
+    : visits ? (bounces ?? 0) / visits : 0;
+  const visit = visits == null
+    ? visitors ? sum(parts, (part) => part.duration * part.visitors) / visitors : 0
+    : visits ? sum(live, (site) => site.duration * site.visits) / visits : 0;
   const p95 = Math.max(...parts.map((part) => part.p95 ?? 0));
   const p50 = parts.slice().sort((a, b) => b.requests - a.requests)[0]?.p50 ?? null;
   const blend = (key: keyof SiteStats["delta"]) => {
+    if (parts.length === 1) return parts[0].delta[key];
     const weight = sum(parts, (part) => part.views) || 1;
     return sum(parts, (part) => part.delta[key] * part.views) / weight;
   };
   return {
-    views, visitors, requests, errors, client, bounce, duration: visit, p50, p95,
+    views, visitors, visits, bounces, requests, errors, client, bounce, duration: visit, p50, p95,
     errorRate: requests ? errors / requests : 0,
     delta: { pageviews: blend("pageviews"), visitors: blend("visitors"), bounce: blend("bounce"), duration: blend("duration"), requests: blend("requests"), errors: blend("errors") },
   };
@@ -588,6 +606,7 @@ export function dayLabels(state: AppState) {
   });
 }
 export function windowLabel(state: AppState) {
+  if (state.umami) return RANGE_LABELS[state.range] + " · UTC";
   const end = new Date(DEMO_END);
   const back = state.range === "24h" ? 0 : state.range === "7d" ? 6 : state.range === "30d" ? 29 : 89;
   const start = new Date(end);
@@ -667,7 +686,7 @@ export function previewPath(input: string) {
 }
 export function privacyTargets(state: AppState) {
   const ids = state.role === "operator" ? ["alpha", "beta"] : [state.tenantId];
-  return ids.filter((id) => PROFILES[id] && !state.removed[id]);
+  return ids.filter((id) => availableProject(state, id) && !state.removed[id]);
 }
 export function erasureImpact(state: AppState, id: string, action: string, stream: string, period: string) {
   const data = stats(state, id, action === "remove" || period === "all" ? "90d" : state.range);

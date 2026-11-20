@@ -7,6 +7,8 @@ export async function GET(request: Request) {
   try {
     const body = await umamiDashboard(
       {
+        UMAMI_API_KEY: process.env.UMAMI_API_KEY,
+        UMAMI_API_CLIENT_ENDPOINT: process.env.UMAMI_API_CLIENT_ENDPOINT,
         UMAMI_URL: process.env.UMAMI_URL,
         UMAMI_USER: process.env.UMAMI_USER,
         UMAMI_PASSWORD: process.env.UMAMI_PASSWORD,

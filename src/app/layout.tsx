@@ -22,6 +22,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         {/* The console already has a dark theme. Keep Dark Reader from rewriting it before hydration. */}
         <meta name="darkreader-lock" />
+        <script defer src="https://cloud.umami.is/script.js" data-website-id="ba460156-97f2-48e5-b533-7a784619d6c5"></script>
       </head>
       <body>{children}</body>
     </html>

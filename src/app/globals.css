@@ -53,7 +53,8 @@ aside {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
   border: 1px solid var(--line-strong); background: var(--surface); border-radius: 12px; padding: 8px 10px; color: var(--text);
 }
-.workspace-menu > button svg { margin-left: auto; opacity: 0.7; }
+.workspace-menu > button svg { flex: none; margin-left: auto; opacity: 0.7; }
+.workspace-menu button > span:not(.avatar), .tenant-pick strong, h1 { overflow-wrap: anywhere; }
 .avatar {
   width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center;
   background: var(--accent); color: #1a1428; font-weight: 600; font-size: 13px; flex: none;
@@ -507,6 +508,11 @@ tr:hover td { background: rgba(243, 239, 230, 0.02); }
 .gate form, .gate-panel { width: min(420px, 100%); padding: 22px; }
 .gate-panel { width: min(560px, 100%); }
 .gate h1 { font-size: 32px; }
+.gate-intro { display: grid; gap: 10px; }
+.gate-intro p { color: var(--muted); margin: 0; }
+.gate-intro a { color: var(--accent); justify-self: start; text-underline-offset: 3px; }
+.gate-intro + h2 { margin-top: 20px; }
+
 .gate input { width: 100%; margin: 16px 0 10px; border-radius: 12px; padding: 12px 14px; }
 .gate form > button, .gate-panel > button.primary {
   width: 100%; border: 0; border-radius: 12px; padding: 11px 14px; background: var(--text); color: #16140f;

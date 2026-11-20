@@ -16,13 +16,13 @@ Choose a perspective on the welcome screen. Use **Workspace** to switch perspect
 | --- | --- |
 | **Public** | Browse aggregate web and API metrics for listed projects. This view is read-only and has no download control. |
 | **SCF** | Compare projects in **Projects**, review enrollment and listing controls in **SCF managing**, and inspect the data management workflow in **Data & privacy**. **Export data** downloads aggregate JSON. In **API**, selecting a project limits the export to that project. |
-| **Tenant** | Select **Northwind** or **Harbor**. Review that project's metrics and integration instructions, then use **Export data from your project** to download its analytics only. |
+| **Tenant** | Select a configured project. **Lend.xyz** remains visible only in **SCF managing** until its Umami website ID is set. Review that project's metrics and integration instructions, then use **Export data from your project** to download its analytics only. |
 
 Open **Roadmap**, just after **Overview**, to see the proposed delivery plan. The interactive timeline covers weeks 8, 12, and 16. Each tranche shows its deliverables and completion criteria. The roadmap links to the SCF RFP on GitBook. Production is targeted for **week 16**, with **12 months of hosting and support** after approval of the final tranche.
 
 ## What the POC demonstrates
 
-- **Web analytics** covers page views, visitors, bounce rate, session duration, referrers, countries, devices, and browsers. The console reads these metrics from Umami when configured and uses sample data as a fallback.
+- **Web analytics** covers pageviews, visitors, visits, bounces, bounce rate, visit duration, and breakdowns for pages, referrers, countries, browsers, devices, and operating systems. Umami Cloud also shows available breakdowns for acquisition channels, events, titles, hostnames, regions, cities, languages, and screens. The console reads these metrics from Umami when configured and uses sample data as a fallback.
 - **API analytics** uses sample request counts, HTTP statuses, normalized routes, and latency estimates. The **Integration** view documents the version-pinned tracker and the OpenTelemetry dual-export workflow.
 - **Project operations** previews free enrollment and separately managed dashboard listing. The console forwards demo enrollment requests to the demo worker. Listing changes, metrics key controls, and data erasure actions in the console use browser session state and reset when the page reloads.
 
@@ -41,15 +41,19 @@ Open [http://localhost:3000](http://localhost:3000). The console uses the hosted
 
 ### Optional Umami integration
 
-Create an ignored `.env.local` file to enable live web metrics for the two demo projects. Keep credentials server-side and use a dedicated Umami account with access to the demo properties.
+Copy [`.env.example`](.env.example) to `.env.local` and fill in the settings for your Umami instance. Git ignores `.env.local`. Use properties whose aggregated web metrics can be shared with demo reviewers.
 
 | Variable | Purpose |
 | --- | --- |
-| `UMAMI_URL` | Base URL of the Umami instance, without a trailing slash |
-| `UMAMI_USER` | Umami account name. The current implementation defaults to `admin` if omitted. |
-| `UMAMI_PASSWORD` | Password for the configured Umami account |
-| `UMAMI_ALPHA` | Umami website ID for Northwind |
-| `UMAMI_BETA` | Umami website ID for Harbor |
+| `UMAMI_API_KEY` | Server-side [Umami Cloud API key](https://docs.umami.is/docs/cloud/api-key) |
+| `UMAMI_API_CLIENT_ENDPOINT` | API endpoint for key-based authentication. Defaults to `https://api.umami.is/v1`. |
+| `UMAMI_ALPHA` | Umami website ID for scf-umami-poc-production.up.railway.app |
+| `UMAMI_BETA` | Optional Umami website ID for Lend.xyz |
+| `UMAMI_URL` | Base URL for self-hosted username/password authentication |
+| `UMAMI_USER` | Self-hosted account name. Defaults to `admin`. |
+| `UMAMI_PASSWORD` | Self-hosted account password |
+
+The console uses the API key when set and reads analytics already collected by the configured Umami sites. Each website ID is configured independently. scf-umami-poc-production.up.railway.app can load with only `UMAMI_ALPHA`.
 
 Restart the dev server after setting these variables. Without Umami configuration, the console uses its bundled web fixtures.
 

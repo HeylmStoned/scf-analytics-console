@@ -1,4 +1,8 @@
+import { nameOf, type LiveProject } from "./model";
+
 export type UmamiEnv = {
+  UMAMI_API_KEY?: string;
+  UMAMI_API_CLIENT_ENDPOINT?: string;
   UMAMI_URL?: string;
   UMAMI_USER?: string;
   UMAMI_PASSWORD?: string;
@@ -11,6 +15,17 @@ const RANGES: Record<string, { period: string; unit: string }> = {
   "7d": { period: "7d", unit: "day" },
   "30d": { period: "30d", unit: "day" },
   "90d": { period: "90day", unit: "day" },
+};
+
+const EXTRA_DIMENSIONS = {
+  channel: "Acquisition channels",
+  event: "Custom events",
+  title: "Page titles",
+  hostname: "Hostnames",
+  region: "Regions",
+  city: "Cities",
+  language: "Languages",
+  screen: "Screen resolutions",
 };
 
 const regions = new Intl.DisplayNames(["en"], { type: "region" });
@@ -43,22 +58,24 @@ function place(code: string): string {
   }
 }
 
-async function umami(env: UmamiEnv, path: string, token?: string): Promise<unknown> {
-  const response = await fetch(env.UMAMI_URL + path, {
-    headers: token ? { authorization: "Bearer " + token } : { "content-type": "application/json" },
+async function umami(endpoint: string, path: string, token: string): Promise<unknown> {
+  const response = await fetch(endpoint + path, {
+    headers: { authorization: "Bearer " + token },
     cache: "no-store",
+    signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) throw new Error("Umami " + response.status);
   return response.json();
 }
 
-async function tokenFor(env: UmamiEnv): Promise<string> {
+async function tokenFor(env: UmamiEnv, endpoint: string): Promise<string> {
   if (session && session.until > Date.now()) return session.token;
-  const response = await fetch(env.UMAMI_URL + "/api/auth/login", {
+  const response = await fetch(endpoint + "/auth/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ username: env.UMAMI_USER || "admin", password: env.UMAMI_PASSWORD }),
     cache: "no-store",
+    signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) throw new Error("Umami login failed");
   const body = (await response.json()) as { token?: string };
@@ -101,40 +118,60 @@ function stamp(value: string, unit: string): { label: string; when: string } {
 }
 
 export async function umamiDashboard(env: UmamiEnv, range: string): Promise<unknown | null> {
-  if (!env.UMAMI_URL || !env.UMAMI_PASSWORD || !env.UMAMI_ALPHA || !env.UMAMI_BETA) return null;
+  const sites = Object.entries({ alpha: env.UMAMI_ALPHA, beta: env.UMAMI_BETA })
+    .flatMap(([id, websiteId]) => websiteId?.trim() ? [{ id, websiteId: websiteId.trim() }] : []);
+  if (!sites.length) return null;
+  const apiKey = env.UMAMI_API_KEY?.trim();
+  const selfHostedUrl = env.UMAMI_URL?.replace(/\/+$/, "");
+  if (!apiKey && (!selfHostedUrl || !env.UMAMI_PASSWORD)) return null;
+  const endpoint = apiKey
+    ? (env.UMAMI_API_CLIENT_ENDPOINT?.trim() || "https://api.umami.is/v1").replace(/\/+$/, "")
+    : selfHostedUrl + "/api";
   const spec = RANGES[range] ?? RANGES["30d"];
   const hit = boards.get(spec.period);
   if (hit && hit.until > Date.now()) return hit.body;
-  const token = await tokenFor(env);
+  const token = apiKey || (await tokenFor(env, endpoint));
   const query = "period=" + spec.period + "&timezone=UTC";
-  const projects = await Promise.all([
-    project(env, token, "alpha", env.UMAMI_ALPHA, query, spec.unit),
-    project(env, token, "beta", env.UMAMI_BETA, query, spec.unit),
-  ]);
+  const projects = await Promise.all(sites.map(({ id, websiteId }) =>
+    project(endpoint, token, id, websiteId, query, spec.unit, Boolean(apiKey)),
+  ));
   const body = { source: "umami", range, projects: Object.fromEntries(projects) };
   boards.set(spec.period, { until: Date.now() + 60_000, body });
   return body;
 }
 
 async function project(
-  env: UmamiEnv,
+  endpoint: string,
   token: string,
   id: string,
   websiteId: string,
   query: string,
   unit: string,
-): Promise<[string, unknown]> {
-  const root = "/api/websites/" + websiteId;
-  const [stats, series, paths, referrers, countries, browsers, devices, systems] = await Promise.all([
-    umami(env, root + "/stats?" + query, token),
-    umami(env, root + "/pageviews?" + query + "&unit=" + unit, token),
-    umami(env, root + "/metrics?" + query + "&type=path&limit=8", token),
-    umami(env, root + "/metrics?" + query + "&type=referrer&limit=8", token),
-    umami(env, root + "/metrics?" + query + "&type=country&limit=8", token),
-    umami(env, root + "/metrics?" + query + "&type=browser&limit=8", token),
-    umami(env, root + "/metrics?" + query + "&type=device&limit=8", token),
-    umami(env, root + "/metrics?" + query + "&type=os&limit=8", token),
+  includeExtraDimensions: boolean,
+): Promise<[string, LiveProject]> {
+  const root = "/websites/" + encodeURIComponent(websiteId);
+  const metric = (type: string) => umami(endpoint, root + "/metrics?" + query + "&type=" + type + "&limit=8", token);
+  const extraDimensions = includeExtraDimensions
+    ? Object.entries(EXTRA_DIMENSIONS)
+    : [];
+  const [stats, series, paths, referrers, countries, browsers, devices, systems, website, extra] = await Promise.all([
+    umami(endpoint, root + "/stats?" + query + (includeExtraDimensions ? "&compare=prev" : ""), token),
+    umami(endpoint, root + "/pageviews?" + query + "&unit=" + unit, token),
+    metric("path"),
+    metric("referrer"),
+    metric("country"),
+    metric("browser"),
+    metric("device"),
+    metric("os"),
+    includeExtraDimensions ? umami(endpoint, root, token).catch(() => null) : null,
+    Promise.all(extraDimensions.map(async ([kind, label]) => {
+      const data = await metric(kind).catch(() => null);
+      return Array.isArray(data) ? [{ label, rows: rows(data, kind) }] : [];
+    })),
   ]);
+  const domain = (website as { domain?: string } | null)?.domain?.toLowerCase();
+  const expectedDomain = nameOf(id).toLowerCase();
+  const alternateDomain = Boolean(domain && domain !== expectedDomain && !domain.endsWith("." + expectedDomain));
   const current = stats as {
     pageviews?: number;
     visitors?: number;
@@ -149,8 +186,8 @@ async function project(
   const previousVisits = num(current.comparison?.visits);
   const previousBounces = num(current.comparison?.bounces);
   const previousBounce = previousVisits ? previousBounces / previousVisits : 0;
-  const duration = visits > bounces ? num(current.totaltime) / (visits - bounces) : 0;
-  const previousDuration = previousVisits > previousBounces ? num(current.comparison?.totaltime) / (previousVisits - previousBounces) : 0;
+  const duration = visits ? num(current.totaltime) / visits : 0;
+  const previousDuration = previousVisits ? num(current.comparison?.totaltime) / previousVisits : 0;
   const pageviews = (series as { pageviews?: { x: string; y: number }[] }).pageviews || [];
   const sessions = (series as { sessions?: { x: string; y: number }[] }).sessions || [];
   const visitorsByDay = new Map(sessions.map((point) => [point.x, num(point.y)]));
@@ -160,12 +197,16 @@ async function project(
     {
       views: num(current.pageviews),
       visitors: num(current.visitors),
+      visits,
+      bounces,
+      alternateDomain,
+      extra: extra.flat(),
       bounce,
       duration,
       pages: rows(paths, "path").map((row) => ({
         path: row.name === "Unknown" ? "/" : row.name,
         views: row.count,
-        visitors: row.count,
+        visitors: null,
         tenantId: id,
       })),
       seriesViews: pageviews.map((point) => num(point.y)),
