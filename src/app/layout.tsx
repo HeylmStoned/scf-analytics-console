@@ -19,6 +19,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
+      <head>
+        {/* The console already has a dark theme. Keep Dark Reader from rewriting it before hydration. */}
+        <meta name="darkreader-lock" />
+      </head>
       <body>{children}</body>
     </html>
   );

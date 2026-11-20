@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Roadmap } from "@/components/Roadmap";
 import { Stage } from "@/components/views";
 import { PROFILES, RANGE_LABELS, RANGES, SNIPPET, createState, headline, isPublic, nameOf, scopeIds, windowLabel, type AppState, type LiveProject, type RangeKey } from "@/lib/model";
 
@@ -16,6 +17,7 @@ const COPY: Record<string, (wide: boolean, name: string, detail: string) => [str
   compare: (wide) => ["Projects", wide ? "Sort, filter, and read projects side by side." : "This key can see only its own project."],
   integration: () => ["Integration", "Pin the web script, then dual-export the API collector."],
   manage: () => ["SCF managing", "Enrollment policy, dashboard listing, and operator metrics keys."],
+  roadmap: () => ["Roadmap", "Proposed SCF grant milestones, deliverables and completion criteria."],
   privacy: () => ["Data & privacy", "Erase sample web or API data, or remove a project from this session."],
 };
 
@@ -236,8 +238,34 @@ export function Console() {
   const copy = (COPY[current.view] || COPY.overview)(wide, profile?.name || "Project", profile?.detail || "This project");
   const listed = (current.roster.tenants || []).filter((tenant) => PROFILES[tenant.id]).length;
   const showRange = RANGE_VIEWS.has(current.view);
+  const showRoadmap = current.view === "roadmap";
   const workspaceLabel = publicMode ? "Public · Ecosystem" : operator ? "SCF · All projects" : profile?.name || "Project";
   const workspaceMark = publicMode ? "P" : operator ? "S" : profile?.name?.[0] || "P";
+
+  function exportData() {
+    if (isPublic(current)) return;
+
+    const projectIds = scopeIds(current).filter((id) => {
+      if (!PROFILES[id]) return false;
+      return current.view !== "api" || current.project === "all" || id === current.project;
+    });
+    if (projectIds.length === 0) return;
+
+    const payload = {
+      range: current.range,
+      view: current.view,
+      projectIds,
+      ...headline(current, projectIds),
+    };
+    const file = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    const scope = projectIds.length === 1 ? projectIds[0] : "ecosystem";
+    link.download = "stellar-analytics-" + scope + "-" + current.range + ".json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   function openEnroll() {
     current.enrollOpen = true;
@@ -362,8 +390,10 @@ export function Console() {
           </div>
         </div>
         <nav aria-label="Sections">
-          <p className="nav-group">Analytics</p>
+          <p className="nav-group">Project</p>
           <NavButton current={current} id="overview" bump={bump} icon={<IconOverview />}>Overview</NavButton>
+          <NavButton current={current} id="roadmap" bump={bump}>Roadmap</NavButton>
+          <p className="nav-group">Analytics</p>
           <NavButton current={current} id="web" bump={bump} icon={<IconWeb />}>Web</NavButton>
           <NavButton current={current} id="api" bump={bump} icon={<IconApi />}>API</NavButton>
           <NavButton current={current} id="compare" bump={bump} icon={<IconProjects />} extra={<span className="count">{listed}</span>}>Projects</NavButton>
@@ -385,74 +415,53 @@ export function Console() {
               <h1>{copy[0]}</h1>
               <p className="lede">{copy[1]}</p>
             </div>
-            <div className="top-tools">
-              <button
-                className="ghost"
-                type="button"
-                onClick={() => {
-                  const data = headline(current, scopeIds(current));
-                  const file = new Blob([JSON.stringify({ range: current.range, view: current.view, note: "Dashboard numbers.", ...data }, null, 2)], { type: "application/json" });
-                  const link = document.createElement("a");
-                  link.href = URL.createObjectURL(file);
-                  link.download = "stellar-analytics-" + current.range + ".json";
-                  link.click();
-                  URL.revokeObjectURL(link.href);
-                }}
-              >
-                Export
-              </button>
-              {publicMode ? null : (
+            {!showRoadmap && !publicMode && (
+              <div className="top-tools">
+                <button className="ghost" type="button" onClick={exportData}>
+                  {current.mode === "tenant" ? "Export data from your project" : "Export data"}
+                </button>
                 <button className="primary" type="button" onClick={openEnroll}>
                   + Add project <span className="free">Free</span>
                 </button>
-              )}
-            </div>
-          </header>
-          <div className="context-strip">
-            <div className="context-tools">
-              <div className="mode-switch" role="group" aria-label="Reviewer mode">
-                <button type="button" aria-pressed={publicMode} onClick={enterPublic}>
-                  Public
-                </button>
-                <button type="button" aria-pressed={operator} onClick={enterScf}>
-                  SCF
-                </button>
-                <button type="button" aria-pressed={current.mode === "tenant"} onClick={openTenantPicker}>
-                  Tenant
-                </button>
               </div>
-              <span className={"status-pill" + (current.umami ? " live" : "")}>
-                {current.umami ? "Live web · sample API" : "Sample data"}
-              </span>
-              {showRange ? (
-                <div className="range-wrap">
-                  <span className="window">{windowLabel(current)}</span>
-                  <label className="range">
-                    <span className="sr">Time range</span>
-                    <select
-                      aria-label="Time range"
-                      value={current.range}
-                      onChange={async (event) => {
-                        current.range = event.target.value as RangeKey;
-                        await loadUmami(current.range);
-                        bump();
-                      }}
-                    >
-                      {RANGES.map((range) => (
-                        <option key={range} value={range}>{RANGE_LABELS[range]}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              ) : null}
+            )}
+          </header>
+          {!showRoadmap && (
+            <div className="context-strip">
+              <div className="context-tools">
+                <span className={"status-pill" + (current.umami ? " live" : "")}>
+                  {current.umami ? "Live web · sample API" : "Sample data"}
+                </span>
+                {showRange ? (
+                  <div className="range-wrap">
+                    <span className="window">{windowLabel(current)}</span>
+                    <label className="range">
+                      <span className="sr">Time range</span>
+                      <select
+                        aria-label="Time range"
+                        value={current.range}
+                        onChange={async (event) => {
+                          current.range = event.target.value as RangeKey;
+                          await loadUmami(current.range);
+                          bump();
+                        }}
+                      >
+                        {RANGES.map((range) => (
+                          <option key={range} value={range}>{RANGE_LABELS[range]}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
-          <div className="enter">
-            <Stage
-              state={current}
-              bump={bump}
-              onOpen={(id) => enterTenant(id)}
-            />
+          )}
+          <div className={showRoadmap ? "enter roadmap-content" : "enter"}>
+            {showRoadmap ? (
+              <Roadmap />
+            ) : (
+              <Stage state={current} bump={bump} onOpen={(id) => enterTenant(id)} />
+            )}
           </div>
         </div>
       </div>
