@@ -28,11 +28,9 @@ The source badge distinguishes **Live web · sample API** from **Sample data**. 
 
 ## Run locally
 
-Use Node.js 22 and npm.
+Use Node.js 22 and npm. From the repository root, run the following commands.
 
 ```sh
-git clone https://github.com/farau/scf-analytics-console.git
-cd scf-analytics-console
 npm ci
 npm run dev
 ```
