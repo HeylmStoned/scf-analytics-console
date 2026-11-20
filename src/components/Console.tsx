@@ -201,10 +201,21 @@ export function Console() {
     }
     return (
       <div className="gate">
-        <div className="panel gate-panel">
-          <p className="eyebrow">Reviewer access</p>
-          <h1>Choose a view</h1>
-          <p className="lede">Three demo modes for reviewers. You can switch anytime from the workspace menu.</p>
+        <div className="panel gate-panel gate-home">
+          <p className="eyebrow">Proof of concept</p>
+          <h1>Stellar ecosystem analytics</h1>
+          <p className="lede">
+            Reviewer console for a shared, free web and API analytics service for Stellar projects.
+            This page is a UI prototype — not production hosting, ingest, or tenant isolation.
+          </p>
+          <div className="home-facts">
+            <p><strong>Real today.</strong> Interactive Public / SCF / Tenant layouts, roadmap, and (when configured) live web aggregates from Umami.</p>
+            <p><strong>Fictional / sample.</strong> API request counts, latency, and most enrollment / key / erase flows use demo fixtures or session state that resets on reload.</p>
+            <p><strong>Design docs.</strong> Full architecture, privacy, and availability commitments:{" "}
+              <a href="https://scf.gitbook.io/scf-docs-1" target="_blank" rel="noreferrer">GitBook</a>.
+            </p>
+          </div>
+          <p className="lede home-choose">Choose a view. You can switch anytime from the workspace menu.</p>
           <div className="mode-grid">
             <button type="button" onClick={enterPublic}>
               <strong>Public</strong>

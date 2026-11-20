@@ -6,7 +6,22 @@
 
 A proof of concept for the Stellar Community Fund (SCF) web and API analytics RFP. The console lets reviewers explore ecosystem adoption, compare projects, and preview the experience of a project team or an SCF operator.
 
-**[Open the demo](https://scf-console-production.up.railway.app)** · [Read the SCF RFP](https://stellar.gitbook.io/scf-handbook/scf-awards/build-award/rfp-track#web-and-api-analytics-for-stellar-ecosystem-projects) · [View changes](CHANGELOG.md)
+**License:** [MIT](LICENSE)
+
+**[Open the demo](https://scf-console-production.up.railway.app)** · [Technical design (GitBook)](https://scf.gitbook.io/scf-docs-1) · [SCF RFP](https://stellar.gitbook.io/scf-handbook/scf-awards/build-award/rfp-track#web-and-api-analytics-for-stellar-ecosystem-projects) · [Changelog](CHANGELOG.md)
+
+## Availability commitments
+
+Same numbers as the GitBook operations page:
+
+| Target | RFP | Our commitment |
+| --- | --- | --- |
+| Data collection (ingest) availability | 99.99% | **99.9%** — will not commit above Supabase’s published platform uptime and a two-replica app tier without uncosted active-active failover |
+| Dashboard availability | 99.90% | **99.9%** |
+| Critical / high vulnerability remediation | 24 hours | **24 hours** |
+| Support: initial response, then resolution | 5 then 10 business days | **5 then 10 business days** |
+
+Production data location: **Frankfurt (`eu-central-1`)**. Ingest buffer: **Redis** (in Compose for operator rebuild).
 
 ## Reviewer walkthrough
 
@@ -30,14 +45,24 @@ The source badge distinguishes **Live web · sample API** from **Sample data**. 
 
 ## Run locally
 
-Use Node.js 22 and npm. From the repository root, run the following commands.
+Use Node.js 22 and npm. From the repository root:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The console uses the hosted demo worker for the roster and integration requests, so the reviewer experience requires network access to that worker. No local database is required.
+Open [http://localhost:3000](http://localhost:3000). The console uses the hosted demo worker for the roster and integration requests, so the reviewer experience requires network access to that worker. No local database is required for the POC.
+
+### Docker Compose
+
+Rebuild and start the POC container from a clean checkout:
+
+```sh
+docker compose up --build
+```
+
+Open [http://localhost:8080](http://localhost:8080). Stop with `docker compose down`.
 
 ### Optional Umami integration
 
