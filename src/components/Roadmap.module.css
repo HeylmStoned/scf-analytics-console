@@ -4,7 +4,7 @@
 }
 .summary {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 12px;
 	margin: 0;
 }
@@ -12,8 +12,7 @@
 	padding: 18px;
 }
 .summary dt,
-.label,
-.amount {
+.label {
 	color: var(--accent);
 	font-size: 0.85rem;
 }
@@ -78,12 +77,6 @@
 	margin-top: 3px;
 	color: var(--muted);
 }
-.budget {
-	margin-inline-start: auto;
-	font-family: var(--mono);
-	text-align: right;
-	white-space: nowrap;
-}
 .deliverables {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
@@ -108,7 +101,6 @@
 	color: var(--muted);
 	line-height: 1.55;
 }
-.deliverables .amount,
 .deliverables strong {
 	color: var(--accent);
 }
@@ -122,14 +114,29 @@
 	}
 }
 
+.timelineHeader {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 6px 16px;
+	margin-bottom: 12px;
+}
+
+.timelineHeader a {
+	color: var(--accent);
+	font-size: 0.85rem;
+	text-underline-offset: 3px;
+}
+
 .timeline h2 {
-	margin: 0 0 12px;
+	margin: 0;
 	font-size: 1rem;
 }
 
 .timeline ol {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	margin: 0;
 	padding: 0;
 	list-style: none;
