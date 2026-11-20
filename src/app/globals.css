@@ -72,14 +72,16 @@ nav { display: flex; flex-direction: column; gap: 2px; }
   letter-spacing: 0.14em; text-transform: uppercase;
 }
 .nav-group:first-child { margin-top: 0; }
-nav button {
+nav button,
+nav .nav-link {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
   text-align: left; border: 0; background: transparent; color: var(--muted); border-radius: 10px; padding: 9px 10px;
 }
+nav .nav-link { text-decoration: none; }
 .nav-label { display: flex; align-items: center; gap: 10px; }
-nav button svg { flex: none; opacity: 0.85; }
+nav .nav-label svg { flex: none; opacity: 0.85; }
 nav button[aria-current="page"] { background: rgba(212, 196, 255, 0.16); color: var(--text); }
-nav button:hover:not([aria-current="page"]) { color: var(--text); }
+nav button:hover:not([aria-current="page"]), nav .nav-link:hover { color: var(--text); }
 .count { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 12px; text-align: center; }
 nav button[aria-current="page"] .count { background: rgba(16, 15, 13, 0.35); color: var(--text); }
 .promo { margin-top: auto; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
@@ -548,7 +550,7 @@ tr:hover td { background: rgba(243, 239, 230, 0.02); }
     grid-column: 1 / -1; flex-direction: row; gap: 4px; max-width: 100%;
     overflow-x: auto; overscroll-behavior-x: contain;
   }
-  nav button { width: auto; flex: 0 0 auto; white-space: nowrap; }
+  nav button, nav .nav-link { width: auto; flex: 0 0 auto; white-space: nowrap; }
   .workspace { padding: 18px 16px 48px; }
   .top, .form-foot, .panel-head, .range-wrap, .top-tools, .context-tools { flex-wrap: wrap; }
   .top, .form-foot { align-items: stretch; flex-direction: column; }

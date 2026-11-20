@@ -17,7 +17,7 @@ const COPY: Record<string, (wide: boolean, name: string, detail: string) => [str
   compare: (wide) => ["Projects", wide ? "Sort, filter, and read projects side by side." : "This key can see only its own project."],
   integration: () => ["Integration", "Pin the web script, then dual-export the API collector."],
   manage: () => ["SCF managing", "Enrollment policy, dashboard listing, and operator metrics keys."],
-  roadmap: () => ["Roadmap", "Proposed SCF grant milestones, deliverables and completion criteria."],
+  roadmap: () => ["Roadmap", "Proposed delivery milestones, deliverables and completion criteria."],
   privacy: () => ["Data & privacy", "Erase sample web or API data, or remove a project from this session."],
 };
 
@@ -392,7 +392,10 @@ export function Console() {
         <nav aria-label="Sections">
           <p className="nav-group">Project</p>
           <NavButton current={current} id="overview" bump={bump} icon={<IconOverview />}>Overview</NavButton>
-          <NavButton current={current} id="roadmap" bump={bump}>Roadmap</NavButton>
+          <NavButton current={current} id="roadmap" bump={bump} icon={<IconRoadmap />}>Roadmap</NavButton>
+          <a className="nav-link" href="https://scf.gitbook.io/scf-docs-1" target="_blank" rel="noreferrer">
+            <span className="nav-label"><IconBook />GitBook</span>
+          </a>
           <p className="nav-group">Analytics</p>
           <NavButton current={current} id="web" bump={bump} icon={<IconWeb />}>Web</NavButton>
           <NavButton current={current} id="api" bump={bump} icon={<IconApi />}>API</NavButton>
@@ -643,6 +646,22 @@ function NavButton({ current, id, bump, icon, extra, children }: { current: AppS
 
 function IconOverview() {
   return <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" fill="none" stroke="currentColor" /><rect x="9" y="2" width="5" height="5" rx="1" fill="none" stroke="currentColor" /><rect x="2" y="9" width="5" height="5" rx="1" fill="none" stroke="currentColor" /><rect x="9" y="9" width="5" height="5" rx="1" fill="none" stroke="currentColor" /></svg>;
+}
+function IconRoadmap() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.2">
+      <path d="m5 11 6-6" />
+      <circle cx="3.5" cy="12.5" r="2" />
+      <circle cx="12.5" cy="3.5" r="2" />
+    </svg>
+  );
+}
+function IconBook() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round">
+      <path d="M8 4.5C6.5 3 4.5 2.8 2 3.7v8.5c2.5-.9 4.5-.7 6 .8 1.5-1.5 3.5-1.7 6-.8V3.7c-2.5-.9-4.5-.7-6 .8ZM8 4.5V13" />
+    </svg>
+  );
 }
 function IconWeb() {
   return <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" /><path d="M3 8h10M8 2.8c1.6 1.6 1.6 8.8 0 10.4M8 2.8c-1.6 1.6-1.6 8.8 0 10.4" fill="none" stroke="currentColor" /></svg>;
