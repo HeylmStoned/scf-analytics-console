@@ -1,6 +1,9 @@
 export const ACCOUNT = "G" + "A".repeat(55);
 export const RANGES = ["24h", "7d", "30d", "90d"] as const;
 export type RangeKey = (typeof RANGES)[number];
+
+export const API_METRICS_NOTICE =
+  "API metrics are simulated in this POC. Live API metrics will be introduced when the OpenTelemetry Protocol (OTLP) collector is implemented.";
 export const SNIPPET =
   '<script defer src="https://s.example/s/v1.0.0/s.js" data-website-id="SITE_ID" integrity="sha384-..." crossorigin="anonymous"></script>';
 
@@ -29,7 +32,16 @@ export const METRICS: Record<string, string> = {
 export const PIE = ["#d4c4ff", "#f0a090", "#9ed9bc", "#e4c48a", "#8f82b8", "#6d6558", "#7eb6d6", "#c4b4a4"];
 const DEMO_END = new Date(Date.UTC(2026, 10, 17));
 
-export type Named = { name: string; count: number };
+export type Named = { name: string; count: number; code?: string };
+export const WEB_AUDIENCE_DIMENSIONS = {
+  countries: "country",
+  referrers: "referrer",
+  devices: "device",
+  browsers: "browser",
+  os: "os",
+} as const;
+type WebAudienceDimension = keyof typeof WEB_AUDIENCE_DIMENSIONS;
+export const WEB_REPORTS = ["pages", "countries", "referrers", "devices", "browsers", "os"] as const;
 export type PageRow = {
   path: string;
   share?: number;
@@ -38,6 +50,8 @@ export type PageRow = {
   tenantId: string;
   views: number;
   visitors: number | null;
+  visits?: number;
+  bounces?: number;
 };
 export type ApiRow = {
   service: string;
@@ -47,6 +61,11 @@ export type ApiRow = {
   p95: number;
   tenantId: string;
   count: number;
+};
+export type ApiFixture = {
+  apiRequests: number;
+  delta: { requests: number; errors: number };
+  api: { service: string; route: string; status: number; share: number; p50: number; p95: number }[];
 };
 export type SiteStats = {
   id: string;
@@ -72,25 +91,41 @@ export type SiteStats = {
   os: Named[];
   delta: { pageviews: number; visitors: number; bounce: number; duration: number; requests: number; errors: number };
 };
+export const WEB_VITALS = {
+  lcp: "Largest Contentful Paint",
+  inp: "Interaction to Next Paint",
+  cls: "Cumulative Layout Shift",
+  fcp: "First Contentful Paint",
+  ttfb: "Time to First Byte",
+};
+export type WebVitals = Partial<Record<keyof typeof WEB_VITALS, { p50: number; p75: number; p95: number }>> & { count: number };
+
 export type LiveProject = {
   views: number;
   visitors: number;
   visits: number;
   bounces: number;
-  alternateDomain: boolean;
-  extra: { label: string; rows: Named[] }[];
+  audience?: Partial<Record<WebAudienceDimension, Named[] | null>>;
+  topPages?: PageRow[] | null;
+  details?: {
+    alternateDomain: boolean;
+    extra: { label: string; rows: Named[] | null }[];
+    activeVisitors?: number;
+    performance?: WebVitals;
+    pages: PageRow[];
+    referrers: Named[];
+    countries: Named[];
+    browsers: Named[];
+    devices: Named[];
+    os: Named[];
+  };
   bounce: number;
   duration: number;
-  pages: PageRow[];
-  seriesViews: number[];
-  seriesVisitors: number[];
+  seriesViews?: number[];
+  seriesVisitors?: number[];
+  dates?: string[];
   labels?: string[];
   when?: string[];
-  referrers: Named[];
-  countries: Named[];
-  browsers: Named[];
-  devices: Named[];
-  os: Named[];
   delta: { pageviews: number; visitors: number; bounce: number; duration: number };
 };
 export type Waiting = { id: string; name: string; detail: string; proof: string; status: string };
@@ -107,7 +142,7 @@ export type Audit = {
   requests: number;
 };
 export type DetailView =
-  | { kind: "path"; tenantId: string; path: string }
+  | { kind: "path"; tenantId: string; path: string; sample?: boolean }
   | { kind: "api"; tenantId: string; route: string; service: string; status: number }
   | { kind: "day"; index: number; source: "web" | "api" };
 
@@ -118,6 +153,7 @@ export type AppState = {
   gateStep: "modes" | "tenant";
   tenantId: string;
   betaConfigured: boolean;
+  publicProjects: string[];
   roster: { tenants: { id: string; token: string }[]; operatorToken: string } | null;
   view: string;
   range: RangeKey;
@@ -147,9 +183,10 @@ export type AppState = {
   waiting: Waiting[];
   keys: { id: string; name: string; hint: string; revoked: boolean; scope: "global" | "tenant"; tenantId?: string }[];
   chartFocus: "both" | "visitors" | "views";
-  audienceSoft: "browsers" | "os";
+  webReport: (typeof WEB_REPORTS)[number];
   keyScope: "global" | "tenant";
   keyTenant: string;
+  apiMetrics: Record<string, ApiFixture> | null;
   umami: Record<string, LiveProject> | null;
   umamiLabels: string[] | null;
   umamiWhen: string[] | null;
@@ -174,15 +211,13 @@ type Profile = {
   visitors: number;
   bounce: number;
   durationSec: number;
-  apiRequests: number;
-  delta: SiteStats["delta"];
+  delta: Omit<SiteStats["delta"], "requests" | "errors">;
   pages: { path: string; share: number; bounce: number; duration: number }[];
   referrers: { name: string; share: number }[];
   countries: { name: string; share: number }[];
   devices: { name: string; share: number }[];
   browsers: { name: string; share: number }[];
   os: { name: string; share: number }[];
-  api: { service: string; route: string; status: number; share: number; p50: number; p95: number }[];
 };
 
 export const PROFILES: Record<string, Profile> = {
@@ -194,8 +229,7 @@ export const PROFILES: Record<string, Profile> = {
     visitors: 19440,
     bounce: 0.384,
     durationSec: 134,
-    apiRequests: 186400,
-    delta: { pageviews: 0.084, visitors: 0.051, bounce: -0.012, duration: 0.037, requests: 0.112, errors: -0.021 },
+    delta: { pageviews: 0.084, visitors: 0.051, bounce: -0.012, duration: 0.037 },
     pages: [
       { path: "/", share: 0.41, bounce: 0.29, duration: 52 },
       { path: "/swap", share: 0.22, bounce: 0.33, duration: 96 },
@@ -240,13 +274,6 @@ export const PROFILES: Record<string, Profile> = {
       { name: "Android", share: 0.12 },
       { name: "Linux", share: 0.03 },
     ],
-    api: [
-      { service: "payments", route: "/accounts/:account/payments/:id", status: 200, share: 0.62, p50: 50, p95: 250 },
-      { service: "payments", route: "/accounts/:account/payments/:id", status: 201, share: 0.12, p50: 100, p95: 250 },
-      { service: "payments", route: "/accounts/:account/payments/:id", status: 404, share: 0.04, p50: 25, p95: 50 },
-      { service: "rpc", route: "/contracts/:contract", status: 200, share: 0.18, p50: 100, p95: 250 },
-      { service: "rpc", route: "/contracts/:contract", status: 500, share: 0.04, p50: 1000, p95: 2500 },
-    ],
   },
   beta: {
     name: "Lend.xyz",
@@ -256,8 +283,7 @@ export const PROFILES: Record<string, Profile> = {
     visitors: 9800,
     bounce: 0.512,
     durationSec: 78,
-    apiRequests: 94200,
-    delta: { pageviews: 0.041, visitors: 0.016, bounce: 0.008, duration: -0.02, requests: 0.063, errors: 0.014 },
+    delta: { pageviews: 0.041, visitors: 0.016, bounce: 0.008, duration: -0.02 },
     pages: [
       { path: "/", share: 0.34, bounce: 0.46, duration: 40 },
       { path: "/markets/usdc", share: 0.28, bounce: 0.38, duration: 126 },
@@ -301,16 +327,10 @@ export const PROFILES: Record<string, Profile> = {
       { name: "Android", share: 0.11 },
       { name: "iOS", share: 0.05 },
     ],
-    api: [
-      { service: "quotes", route: "/markets/usdc", status: 200, share: 0.55, p50: 25, p95: 100 },
-      { service: "quotes", route: "/markets/:id", status: 200, share: 0.22, p50: 50, p95: 250 },
-      { service: "payments", route: "/accounts/:account/payments/:id", status: 200, share: 0.14, p50: 100, p95: 250 },
-      { service: "payments", route: "/accounts/:account/payments/:id", status: 500, share: 0.09, p50: 1000, p95: 2500 },
-    ],
   },
 };
 
-export function createState(betaConfigured = false): AppState {
+export function createState(betaConfigured = false, publicProjects = ["alpha"]): AppState {
   return {
     token: "",
     role: "",
@@ -318,6 +338,7 @@ export function createState(betaConfigured = false): AppState {
     gateStep: "modes",
     tenantId: "",
     betaConfigured,
+    publicProjects,
     roster: null,
     view: "overview",
     range: "30d",
@@ -347,9 +368,10 @@ export function createState(betaConfigured = false): AppState {
     waiting: [{ id: "quill", name: "Quill", detail: "Sample application", proof: "SCF project link", status: "pending" }],
     keys: [{ id: "live", name: "Ecosystem reader", hint: "scf_mtr_9f3a2c1e", revoked: false, scope: "global" }],
     chartFocus: "both",
-    audienceSoft: "browsers",
+    webReport: "pages",
     keyScope: "global",
     keyTenant: "alpha",
+    apiMetrics: null,
     umami: null,
     umamiLabels: null,
     umamiWhen: null,
@@ -445,10 +467,11 @@ export function stats(state: AppState, id: string, range: RangeKey = state.range
   });
   let views = pages.reduce((total, page) => total + page.views, 0);
   let pageRows: PageRow[] = pages;
-  let api: ApiRow[] = profile.api.map((row) => {
+  const apiFixture = isPublic(state) ? undefined : state.apiMetrics?.[id];
+  let api: ApiRow[] = apiFixture?.api.map((row) => {
     const key = row.service + "|" + row.route + "|" + row.status;
-    return { ...row, tenantId: id, count: Math.round(row.share * Math.round(profile.apiRequests * scale)) + (extra.api[key] || 0) };
-  });
+    return { ...row, tenantId: id, count: Math.round(row.share * Math.round(apiFixture.apiRequests * scale)) + (extra.api[key] || 0) };
+  }) ?? [];
   if (streamOff(state, id, "web", range)) {
     views = 0;
     visitors = 0;
@@ -484,26 +507,28 @@ export function stats(state: AppState, id: string, range: RangeKey = state.range
     devices: shareRows(profile.devices, visitors),
     browsers: shareRows(profile.browsers, visitors),
     os: shareRows(profile.os, visitors),
-    delta: profile.delta,
+    delta: { ...profile.delta, requests: apiFixture?.delta.requests ?? 0, errors: apiFixture?.delta.errors ?? 0 },
   };
   const live = range === state.range ? state.umami?.[id] : undefined;
   if (!live) return built;
   const webOff = streamOff(state, id, "web", range);
-  const zeros = () => Array.from({ length: (live.seriesViews || []).length }, () => 0);
+  const zeros = () => Array.from({ length: live.seriesViews?.length ?? 0 }, () => 0);
+  const details = live.details;
+  const breakdown = (rows: Named[] = []) => webOff ? [] : rows;
   return {
     ...built,
     views: webOff ? 0 : live.views,
     visitors: webOff ? 0 : live.visitors,
     bounce: webOff ? 0 : live.bounce,
     duration: webOff ? 0 : live.duration,
-    pages: webOff ? live.pages.map((page) => ({ ...page, views: 0, visitors: 0 })) : live.pages,
-    seriesViews: webOff ? zeros() : live.seriesViews,
-    seriesVisitors: webOff ? zeros() : live.seriesVisitors,
-    referrers: webOff ? live.referrers.map((row) => ({ ...row, count: 0 })) : live.referrers,
-    countries: webOff ? live.countries.map((row) => ({ ...row, count: 0 })) : live.countries,
-    devices: webOff ? live.devices.map((row) => ({ ...row, count: 0 })) : live.devices,
-    browsers: webOff ? live.browsers.map((row) => ({ ...row, count: 0 })) : live.browsers,
-    os: webOff ? live.os.map((row) => ({ ...row, count: 0 })) : live.os,
+    pages: webOff ? [] : live.topPages ?? details?.pages ?? [],
+    seriesViews: webOff ? zeros() : live.seriesViews ?? [],
+    seriesVisitors: webOff ? zeros() : live.seriesVisitors ?? [],
+    referrers: breakdown(details?.referrers),
+    countries: breakdown(details?.countries),
+    devices: breakdown(details?.devices),
+    browsers: breakdown(details?.browsers),
+    os: breakdown(details?.os),
     delta: {
       ...live.delta,
       requests: built.delta.requests,
@@ -523,6 +548,12 @@ export function liveSites(state: AppState, ids: string[]) {
   });
 }
 
+export function webMetricSource(state: AppState, ids: string[]) {
+  const live = ids.filter((id) => state.umami?.[id]).length;
+  if (!live) return "Sample";
+  return live === ids.length ? "Live" : "Live + Sample";
+}
+
 export function listingOf(state: AppState, id: string) {
   if (state.removed[id]) return "removed";
   const waiting = state.waiting.find((item) => item.id === id);
@@ -531,7 +562,12 @@ export function listingOf(state: AppState, id: string) {
 }
 export function scopeIds(state: AppState) {
   if (state.role === "operator" || state.role === "public") {
-    return (state.roster?.tenants || []).map((tenant) => tenant.id).filter((id) => availableProject(state, id) && listingOf(state, id) === "listed");
+    return (state.roster?.tenants || []).map((tenant) => tenant.id).filter((id) => {
+      if (!availableProject(state, id) || state.removed[id]) return false;
+      if (!isPublic(state)) return true;
+      return listingOf(state, id) === "listed" && state.publicProjects.includes(id)
+        && (!state.umami || Object.hasOwn(state.umami, id));
+    });
   }
   return availableProject(state, state.tenantId) ? [state.tenantId] : [];
 }
@@ -659,7 +695,7 @@ export function categoryRows(state: AppState, ids: string[], metric: string): { 
       .slice(0, 8);
   }
   const key = (metric === "status" ? "countries" : metric) as "referrers" | "countries" | "devices" | "browsers" | "os";
-  return merged(state, ids, key).slice(0, 8);
+  return merged(state, ids, key);
 }
 export function previewPath(input: string) {
   const account = /^G[A-Z2-7]{55}$/;

@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Bars, GroupedChart, Stack, type ChartSeries } from "@/components/charts";
+import { CountryMap } from "@/components/CountryMap";
+import { Bars, Donut, GroupedChart, Stack, type ChartSeries } from "@/components/charts";
 import {
   ACCOUNT,
   METRICS,
+  WEB_REPORTS,
   PIE,
   PRIOR,
   PROFILES,
+  RANGE_LABELS,
+  WEB_VITALS,
   availableProject,
   liveSites,
   SNIPPET,
@@ -18,6 +22,7 @@ import {
   erasureImpact,
   headline,
   hueOf,
+  isPublic,
   listingOf,
   ms,
   nameOf,
@@ -32,8 +37,10 @@ import {
   tone,
   visibleApi,
   windowLabel,
+  webMetricSource,
   type AppState,
   type DetailView,
+  type Named,
   type RangeKey,
 } from "@/lib/model";
 
@@ -50,6 +57,10 @@ function Change({ value, goodWhenUp, range }: { value: number; goodWhenUp: boole
       vs {PRIOR[range]}
     </>
   );
+}
+
+function SourceBadge({ source }: { source: string }) {
+  return <span className={"kpi-badge" + (source === "Live" || source === "Umami" ? " live" : "")}>{source}</span>;
 }
 
 function Kpi({
@@ -74,7 +85,7 @@ function Kpi({
       <div className="kpi-top">
         <p className="label">{label}</p>
         <span className="kpi-meta">
-          {badge ? <span className={"kpi-badge" + (badge === "Umami" || badge === "Live" ? " live" : "")}>{badge}</span> : null}
+          {badge ? <SourceBadge source={badge} /> : null}
           {icon}
         </span>
       </div>
@@ -124,7 +135,7 @@ function chartProps(state: AppState, series: ChartSeries[]) {
 }
 
 const PRIVACY_LINE =
-  "This demo collects no visitor telemetry. Country, device and browser breakdowns are generated fixtures. Production privacy controls remain to be implemented.";
+  "Live web reports use aggregate Umami metrics. Geographic reporting is limited to the country level. The data erasure controls demonstrate the proposed workflow.";
 
 function PrivacyCard() {
   return (
@@ -147,11 +158,16 @@ function PrivacyNote() {
 }
 
 function Freshness({ state }: { state: AppState }) {
-  const alternateProjects = scopeIds(state).filter((id) => state.umami?.[id]?.alternateDomain);
+  const ids = scopeIds(state);
+  const source = webMetricSource(state, ids);
+  const alternateProjects = ids.filter((id) => state.umami?.[id]?.details?.alternateDomain);
+  const showSource = state.view !== "web" || source !== "Live";
+  if (!showSource && !alternateProjects.length) return null;
   return (
     <p className="freshness">
-      <span className={state.umami ? "live" : ""}>{state.umami ? "Web · Umami synced" : "Web · sample"}</span>
-      <span>API · collector sample</span>
+      {showSource ? <span className={source === "Live" ? "live" : ""}>{source === "Live"
+        ? "Web · Umami synced" : source === "Sample" ? "Web · sample" : "Web · live and sample"}</span> : null}
+      {state.view === "overview" && !isPublic(state) && state.apiMetrics ? <span>API · collector sample</span> : null}
       {alternateProjects.map((id) => <span key={id}>{nameOf(id)} · Umami data from a different domain</span>)}
     </p>
   );
@@ -189,20 +205,6 @@ function pinDay(state: AppState, bump: () => void, source: "web" | "api") {
   };
 }
 
-function openPathDetail(state: AppState, ids: string[], label: string, bump: () => void) {
-  if (!ids.length) return;
-  if (ids.length > 1 && label.includes(" · ")) {
-    const sep = label.indexOf(" · ");
-    const projectName = label.slice(0, sep);
-    const path = label.slice(sep + 3);
-    const id = ids.find((item) => nameOf(item) === projectName) || ids[0];
-    state.detail = { kind: "path", tenantId: id, path };
-  } else {
-    state.detail = { kind: "path", tenantId: ids[0], path: label };
-  }
-  bump();
-}
-
 function openApiDetail(
   state: AppState,
   row: { tenantId: string; route: string; service: string; status: number },
@@ -222,52 +224,57 @@ function Activity({ state, ids, bump }: { state: AppState; ids: string[]; bump: 
     );
   }
   const focus = state.chartFocus;
-  const series: ChartSeries[] =
-    focus === "visitors"
-      ? [{ name: "Visitors", values: addSeries(state, ids, "seriesVisitors"), color: "#f0a090" }]
-      : focus === "views"
-        ? [{ name: "Views", values: addSeries(state, ids, "seriesViews"), color: "#d4c4ff" }]
-        : [
-            { name: "Visitors", values: addSeries(state, ids, "seriesVisitors"), color: "#f0a090" },
-            { name: "Views", values: addSeries(state, ids, "seriesViews"), color: "#d4c4ff" },
-          ];
-  const title = focus === "visitors" ? "Unique visitors" : focus === "views" ? "Page views" : "Web activity";
+  const publicMode = isPublic(state);
+  const periodOnly = publicMode || Boolean(state.umami && ids.some((id) => !state.umami?.[id]?.seriesViews?.length));
+  const data = headline(state, ids);
+  const series: ChartSeries[] = [];
+  if (focus !== "views") series.push({
+    name: "Visitors", values: periodOnly ? [data.visitors] : addSeries(state, ids, "seriesVisitors"), color: "#f0a090",
+  });
+  if (focus !== "visitors") series.push({
+    name: "Views", values: periodOnly ? [data.views] : addSeries(state, ids, "seriesViews"), color: "#d4c4ff",
+  });
+  const title = "Web activity";
+  const period = RANGE_LABELS[state.range];
+  const dateLabels = periodOnly ? { labels: [period], whens: [period] } : chartProps(state, series);
   return (
     <section className="panel" style={{ marginTop: 12 }}>
       <div className="panel-head">
         <div>
           <h2>{title}</h2>
           <p>
-            {ids.length > 1 ? "Across listed projects · " : nameOf(ids[0]) + " · "}
-            {focus === "both" ? "visitors and page views" : focus === "visitors" ? "distinct sessions" : "frontend activity"}
-            {" · pin a day to inspect"}
+            {periodOnly
+              ? publicMode ? "Totals for the selected period." : "Activity over time is unavailable for this scope. Showing period totals."
+              : state.range === "24h" ? "Select an hour to inspect its activity." : "Select a day to inspect its activity."}
           </p>
         </div>
-        <span className="badge">{state.umami ? "Umami" : "Sample data"}</span>
+        <SourceBadge source={webMetricSource(state, ids)} />
       </div>
-      <GroupedChart series={series} label={title} {...chartProps(state, series)} onPin={pinDay(state, bump, "web")} />
+      <div className={periodOnly ? "activity-period" : undefined}>
+        <GroupedChart series={series} label={title} {...dateLabels} onPin={periodOnly ? undefined : pinDay(state, bump, "web")} />
+      </div>
     </section>
   );
 }
 
-function SecondaryStats({ ids, data }: { ids: string[]; data: ReturnType<typeof headline> }) {
+function SecondaryStats({ ids, data, webSource }: { ids: string[]; data: ReturnType<typeof headline>; webSource: string }) {
   if (!ids.length) return null;
   return (
     <section className="secondary-stats slim">
       <div>
-        <span>Bounce rate</span>
+        <p className="metric-label"><span>Bounce rate</span><SourceBadge source={webSource} /></p>
         <strong>{pct(data.bounce)}</strong>
       </div>
       <div>
-        <span>Visit duration</span>
+        <p className="metric-label"><span>Visit duration</span><SourceBadge source={webSource} /></p>
         <strong>{duration(data.duration)}</strong>
       </div>
       <div>
-        <span>{data.visits == null ? "Views / visitor" : "Views / visit"}</span>
+        <p className="metric-label"><span>{data.visits == null ? "Average views per visitor" : "Average views per visit"}</span><SourceBadge source={webSource} /></p>
         <strong>{(data.visits ?? data.visitors) > 0 ? (data.views / (data.visits ?? data.visitors)).toFixed(1) : "—"}</strong>
       </div>
       <div>
-        <span>Listed projects</span>
+        <p className="metric-label"><span>Listed projects</span><SourceBadge source="Workspace" /></p>
         <strong>{ids.length}</strong>
       </div>
     </section>
@@ -295,22 +302,24 @@ function ApiCurve({ state, ids, bump }: { state: AppState; ids: string[]; bump: 
 }
 
 function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: string[]; bump: () => void; onOpen: (id: string) => void }) {
+  const privateMode = !isPublic(state);
+  const showApi = privateMode && Boolean(state.apiMetrics);
+  const sort = showApi ? state.projectSort : state.projectSort === "name" ? "name" : "visitors";
   const query = state.projectQuery.trim().toLowerCase();
   let rows = ids.map((id) => ({ id, meta: PROFILES[id], data: stats(state, id) })).filter((row) => row.meta);
   if (query) rows = rows.filter((row) => (row.meta.name + " " + row.meta.detail).toLowerCase().includes(query));
   rows.sort((a, b) => {
-    if (state.projectSort === "visitors") return b.data.visitors - a.data.visitors;
-    if (state.projectSort === "errors") return b.data.errorRate - a.data.errorRate;
-    if (state.projectSort === "p95") return (b.data.p95 || 0) - (a.data.p95 || 0);
-    if (state.projectSort === "name") return a.meta.name.localeCompare(b.meta.name);
+    if (sort === "visitors") return b.data.visitors - a.data.visitors;
+    if (sort === "errors") return b.data.errorRate - a.data.errorRate;
+    if (sort === "p95") return (b.data.p95 || 0) - (a.data.p95 || 0);
+    if (sort === "name") return a.meta.name.localeCompare(b.meta.name);
     return b.data.requests - a.data.requests;
   });
   return (
     <section className="panel" style={{ marginTop: 12 }}>
       <div className="panel-head">
         <div>
-          <h2>{ids.length > 1 ? "Ecosystem projects" : "This project"}</h2>
-          <p>Same window, same metrics — sort by what needs attention.</p>
+          <h2>Ecosystem projects</h2>
         </div>
         <span className="count">{rows.length}</span>
       </div>
@@ -328,31 +337,36 @@ function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: stri
           />
           <select
             aria-label="Sort projects"
-            value={state.projectSort}
+            value={sort}
             onChange={(event) => {
               state.projectSort = event.target.value;
               bump();
             }}
           >
-            <option value="requests">API requests ↓</option>
+            {showApi ? <option value="requests">API requests ↓</option> : null}
             <option value="visitors">Visitors ↓</option>
-            <option value="errors">Error rate ↓</option>
-            <option value="p95">p95 ↓</option>
+            {showApi ? <option value="errors">Error rate ↓</option> : null}
+            {showApi ? <option value="p95">p95 ↓</option> : null}
             <option value="name">Name A–Z</option>
           </select>
         </div>
       ) : null}
       <div className="table-wrap">
-        <table>
+        <table className="project-table">
           <thead>
             <tr>
               <th>Product</th>
               <th>Visitors</th>
               <th>Views</th>
-              <th>API</th>
-              <th>Errors</th>
-              <th>p95</th>
-              <th />
+              <th>Web source</th>
+              {showApi ? (
+                <>
+                  <th>API <SourceBadge source="Sample" /></th>
+                  <th>Errors <SourceBadge source="Sample" /></th>
+                  <th>p95 <SourceBadge source="Sample" /></th>
+                </>
+              ) : null}
+              {privateMode ? <th /> : null}
             </tr>
           </thead>
           <tbody>
@@ -370,19 +384,26 @@ function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: stri
                   </td>
                   <td className="num">{num(row.data.visitors)}</td>
                   <td className="num">{num(row.data.views)}</td>
-                  <td className="num">{num(row.data.requests)}</td>
-                  <td className="num">{pct(row.data.errorRate)}</td>
-                  <td className="num">{ms(row.data.p95)}</td>
-                  <td>
-                    <button className="ghost" type="button" onClick={() => onOpen(row.id)}>
-                      Open as tenant
-                    </button>
-                  </td>
+                  <td><SourceBadge source={webMetricSource(state, [row.id])} /></td>
+                  {showApi ? (
+                    <>
+                      <td className="num">{num(row.data.requests)}</td>
+                      <td className="num">{pct(row.data.errorRate)}</td>
+                      <td className="num">{ms(row.data.p95)}</td>
+                    </>
+                  ) : null}
+                  {privateMode ? (
+                    <td>
+                      <button className="ghost" type="button" onClick={() => onOpen(row.id)}>
+                        Open as tenant
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={7}>No project matches.</td>
+                <td colSpan={4 + (showApi ? 3 : 0) + Number(privateMode)}>No project matches.</td>
               </tr>
             )}
           </tbody>
@@ -392,72 +413,191 @@ function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: stri
   );
 }
 
-function RankedPanel({ state, ids, metric, bump }: { state: AppState; ids: string[]; metric: string; bump: () => void }) {
-  const rows = categoryRows(state, ids, metric).slice(0, 8);
-  const live = liveSites(state, ids).length > 0;
-  if (live && metric !== "pages") {
-    return (
-      <section className="panel ranked">
-        <h2>{METRICS[metric]}</h2>
-        <Bars rows={rows} />
-      </section>
-    );
-  }
-  const total = rows.reduce((summed, row) => summed + row.count, 0) || 1;
-  const pick = (name: string) => {
-    if (live) {
-      openPathDetail(state, ids, name, bump);
-      return;
-    }
-    if (metric === "pages") {
-      if (!(state.metric === metric && state.slice === name)) {
-        state.metric = metric;
-        state.slice = name;
-      }
-      openPathDetail(state, ids, name, bump);
-      return;
-    }
-    if (state.metric === metric && state.slice === name) {
-      state.metric = "";
-      state.slice = "";
-    } else {
-      state.metric = metric;
-      state.slice = name;
-    }
-    bump();
-  };
-  const filteredElsewhere = Boolean(state.metric && state.slice && state.metric !== metric);
+function ProjectRollout({ state, ids }: { state: AppState; ids: string[] }) {
+  if (state.role !== "operator") return null;
+  const projects = [
+    ...ids.map((id) => ({ name: nameOf(id), status: "Available" })),
+    ...(!state.betaConfigured ? [{ name: nameOf("beta"), status: "Awaiting Umami ID" }] : []),
+    { name: "Prism.fi", status: "Will be added to the dashboard" },
+  ];
   return (
-    <section className={"panel ranked" + (state.metric === metric ? " on" : "") + (filteredElsewhere ? " dimmed" : "")}>
+    <section className="panel project-rollout">
       <div className="panel-head">
         <div>
-          <h2>{METRICS[metric]}</h2>
-          <p>{live ? "Select a path to see its pageview count." : "Click a row to filter KPIs and the chart."}</p>
+          <h2>Project rollout</h2>
+          <p>Each segment represents one project.</p>
         </div>
       </div>
-      <div className="rank-list">
-        {rows.map((row) => {
-          const share = row.count / total;
-          const active = state.metric === metric && state.slice === row.name;
-          return (
-            <button key={row.name} type="button" className={"rank-row" + (active ? " on" : "")} onClick={() => pick(row.name)}>
-              <span className="rank-fill" style={{ width: Math.max(4, Math.round(share * 100)) + "%" }} aria-hidden="true" />
-              <span className="rank-label">
-                <strong>{row.name}</strong>
-                {row.bounce == null ? null : (
-                  <span className="quiet">
-                    {pct(row.bounce)} bounce · {duration(row.duration || 0)}
-                  </span>
-                )}
-              </span>
-              <span className="rank-nums">
-                <b>{num(row.count)}</b>
-                <em>{pct(share)}</em>
-              </span>
-            </button>
-          );
-        })}
+      <div className="project-rollout-body">
+        <Donut rows={projects.map(({ name, status }) => ({ name, count: 1, detail: status }))} colors={PIE} label="Available and planned projects" large />
+        <ul aria-label="Project onboarding status">
+          {projects.map(({ name, status }, index) => (
+            <li key={name}>
+              <i className="swatch" style={{ background: PIE[index % PIE.length] }} aria-hidden="true" />
+              <span><strong>{name}</strong><small className="quiet">{status}</small></span>
+            </li>
+          ))}
+        </ul>
       </div>
+    </section>
+  );
+}
+
+function WebBreakdownTable({ state, ids, bump }: { state: AppState; ids: string[]; bump: () => void }) {
+  const report = state.webReport;
+  const [country, setCountry] = useState<string | null>(null);
+  const sampleState = { ...state, umami: null };
+  const sites = liveSites(state, ids);
+  const pages = report === "pages";
+  const showProject = pages && ids.length > 1;
+  const available = sites.length > 0 && sites.every((site) => pages ? site.topPages != null : site.audience?.[report] != null);
+  const pageRows = pages
+    ? ids.flatMap((id) => {
+      const live = state.umami?.[id];
+      if (available && live?.topPages == null) return [];
+      return stats(available ? state : sampleState, id).pages;
+    }).filter((row) => row.views > 0).sort((a, b) => b.views - a.views)
+    : [];
+  const counts = new Map<string, Named>();
+  if (available && !pages) {
+    for (const site of sites) {
+      for (const row of site.audience?.[report] ?? []) {
+        const key = row.code ?? row.name;
+        counts.set(key, { ...row, count: (counts.get(key)?.count ?? 0) + row.count });
+      }
+    }
+  }
+  const rows: Named[] = pages ? [] : available
+    ? [...counts.values()].sort((a, b) => b.count - a.count)
+    : categoryRows(sampleState, ids, report).filter((row) => row.count > 0);
+
+  function filterSample(name: string | null) {
+    if (state.umami) return;
+    const enabled = name !== null && (state.metric !== report || state.slice !== name);
+    state.metric = enabled ? report : "";
+    state.slice = enabled ? name : "";
+    bump();
+  }
+
+  function selectCountry(key: string | null) {
+    setCountry(key);
+    filterSample(rows.find((row) => (row.code ?? row.name) === key)?.name ?? null);
+  }
+
+  return (
+    <section className="panel web-breakdowns web-report-table">
+      <div className="panel-head">
+        <h2>Web breakdowns</h2>
+        {available ? null : <span className="badge">Sample</span>}
+      </div>
+      <div className="soft-tabs" role="group" aria-label="Web report">
+        {WEB_REPORTS.map((metric) => (
+          <button key={metric} type="button" aria-pressed={metric === report} onClick={() => {
+            state.webReport = metric;
+            setCountry(null);
+            if (state.metric && state.metric !== metric) {
+              state.metric = "";
+              state.slice = "";
+            }
+            bump();
+          }}>{METRICS[metric]}</button>
+        ))}
+      </div>
+      {!available && sites.length > 0 ? (
+        <p className="caption">Umami data is unavailable for this report. Showing sample data.</p>
+      ) : null}
+      {report === "countries" ? (
+        <>
+          <p className="caption">To protect visitor privacy, geographic data is available only at country level.</p>
+          <CountryMap rows={rows} selected={country} onSelect={selectCountry} />
+        </>
+      ) : null}
+      <div className="table-wrap">
+        <table aria-label={METRICS[report]}>
+          <thead>
+            {pages ? (
+              <tr>
+                <th>Path</th>
+                {showProject ? <th>Project</th> : null}
+                <th>Views</th>
+                <th>Visitors</th>
+                <th>Visits</th>
+                <th>Bounce rate</th>
+                <th>Average visit duration</th>
+              </tr>
+            ) : (
+              <tr><th>{METRICS[report]}</th><th>Visitors</th></tr>
+            )}
+          </thead>
+          <tbody>
+            {pages ? pageRows.map((row) => (
+              <tr key={row.tenantId + row.path}>
+                <td><button className="report-link mono" type="button" onClick={() => {
+                  filterSample(ids.length > 1 ? nameOf(row.tenantId) + " · " + row.path : row.path);
+                  state.detail = { kind: "path", tenantId: row.tenantId, path: row.path, sample: !available };
+                  bump();
+                }}>{row.path}</button></td>
+                {showProject ? <td>{nameOf(row.tenantId)}</td> : null}
+                <td className="num">{num(row.views)}</td>
+                <td className="num">{row.visitors == null ? "—" : num(row.visitors)}</td>
+                <td className="num">{row.visits == null ? "—" : num(row.visits)}</td>
+                <td className="num">{row.bounce == null ? "—" : pct(row.bounce)}</td>
+                <td className="num">{row.duration == null ? "—" : duration(row.duration)}</td>
+              </tr>
+            )) : rows.map((row) => {
+              const key = row.code ?? row.name;
+              return (
+                <tr key={key} className={report === "countries" && country === key ? "row-on" : undefined}>
+                  <td>{report === "countries" ? (
+                    <button type="button" className="report-link" aria-pressed={country === key}
+                      onClick={() => selectCountry(country === key ? null : key)}>{row.name}</button>
+                  ) : !state.umami ? (
+                    <button type="button" className="report-link" onClick={() => filterSample(row.name)}>{row.name}</button>
+                  ) : row.name}</td>
+                  <td className="num">{num(row.count)}</td>
+                </tr>
+              );
+            })}
+            {(pages ? pageRows.length === 0 : rows.length === 0) ? (
+              <tr><td colSpan={pages ? 6 + Number(showProject) : 2}>No data for this period.</td></tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function WebPerformance({ state, ids }: { state: AppState; ids: string[] }) {
+  const rows = ids.flatMap((id) => liveSites(state, [id]).flatMap((site) => {
+    const report = site.details?.performance;
+    if (!report?.count) return [];
+    return (Object.entries(WEB_VITALS) as [keyof typeof WEB_VITALS, string][]).flatMap(([metric, label]) => {
+      const value = report[metric];
+      return value ? [{ id, label, metric, value }] : [];
+    });
+  }));
+  return (
+    <section className="panel" style={{ marginTop: 12 }}>
+      <div className="panel-head"><h2>Web performance</h2></div>
+      {rows.length ? (
+        <div className="table-wrap">
+          <table>
+            <thead><tr>{ids.length > 1 ? <th>Project</th> : null}<th>Metric</th><th>p50</th><th>p75</th><th>p95</th></tr></thead>
+            <tbody>
+              {rows.map(({ id, label, metric, value }) => (
+                <tr key={id + metric}>
+                  {ids.length > 1 ? <td>{nameOf(id)}</td> : null}
+                  <th scope="row">{label} ({metric.toUpperCase()})</th>
+                  {[value.p50, value.p75, value.p95].map((measurement, index) => (
+                    <td className="num" key={index}>{metric === "cls" ? measurement.toFixed(3) : ms(measurement)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p className="empty">No performance measurements available for this period.</p>}
     </section>
   );
 }
@@ -733,18 +873,20 @@ function PathDetail({
   detail: Extract<DetailView, { kind: "path" }>;
   bump: () => void;
 }) {
-  const site = stats(state, detail.tenantId);
+  const report = state.umami?.[detail.tenantId];
+  const live = !detail.sample && Boolean(report?.topPages ?? report?.details?.pages);
+  const site = stats(live ? state : { ...state, umami: null }, detail.tenantId);
   const page = site.pages.find((row) => row.path === detail.path);
   if (!page) {
     return (
       <>
         <h2>Path not found</h2>
-        <p className="quiet">This path is not in the current sample for {nameOf(detail.tenantId)}.</p>
+        <p className="quiet">This path is unavailable for {nameOf(detail.tenantId)}.</p>
       </>
     );
   }
   const share = site.views ? page.views / site.views : 0;
-  if (state.umami?.[detail.tenantId]) {
+  if (live) {
     return (
       <>
         <div className="panel-head">
@@ -753,10 +895,14 @@ function PathDetail({
             <h2><code>{detail.path}</code></h2>
             <p>{windowLabel(state)}</p>
           </div>
-          <span className="badge">Umami</span>
         </div>
         <div className="detail-kpis">
           <div><span>Views</span><strong>{num(page.views)}</strong></div>
+          {page.visitors != null ? <div><span>Visitors</span><strong>{num(page.visitors)}</strong></div> : null}
+          {page.visits != null ? <div><span>Visits</span><strong>{num(page.visits)}</strong></div> : null}
+          {page.bounces != null ? <div><span>Bounces</span><strong>{num(page.bounces)}</strong></div> : null}
+          {page.bounce != null ? <div><span>Bounce rate</span><strong>{pct(page.bounce)}</strong></div> : null}
+          {page.duration != null ? <div><span>Visit duration</span><strong>{duration(page.duration)}</strong></div> : null}
           <div><span>Share of project pageviews</span><strong>{pct(share)}</strong></div>
         </div>
       </>
@@ -793,7 +939,7 @@ function PathDetail({
           </h2>
           <p>{pct(share)} of project pageviews · {windowLabel(state)}</p>
         </div>
-        <span className="badge">{state.umami ? "Umami" : "Sample"}</span>
+        <span className="badge">Sample</span>
       </div>
       <div className="detail-kpis">
         <div>
@@ -825,16 +971,18 @@ function PathDetail({
         </div>
       </div>
       <div className="detail-actions">
-        <button
-          type="button"
-          onClick={() => {
-            state.metric = "pages";
-            state.slice = filterLabel;
-            bump();
-          }}
-        >
-          Apply as filter
-        </button>
+        {!state.umami ? (
+          <button
+            type="button"
+            onClick={() => {
+              state.metric = "pages";
+              state.slice = filterLabel;
+              bump();
+            }}
+          >
+            Apply as filter
+          </button>
+        ) : null}
         <button className="ghost" type="button" onClick={() => closeDetail(state, bump)}>
           Done
         </button>
@@ -1003,6 +1151,7 @@ function DayDetail({
   detail: Extract<DetailView, { kind: "day" }>;
   bump: () => void;
 }) {
+  const showApi = Boolean(state.apiMetrics) && (detail.source === "api" || !state.umami);
   const when = pointWhen(state, detail.index, Math.max(...ids.map((id) => stats(state, id).seriesViews.length), 1));
   const rows = ids.map((id) => {
     const site = stats(state, id);
@@ -1026,40 +1175,20 @@ function DayDetail({
         </div>
       </div>
       <div className="detail-kpis">
-        {detail.source === "api" ? (
+        <div>
+          <p className="metric-label"><span>Visitors</span><SourceBadge source={webMetricSource(state, ids)} /></p>
+          <strong>{num(visitors)}</strong>
+        </div>
+        <div>
+          <p className="metric-label"><span>Views</span><SourceBadge source={webMetricSource(state, ids)} /></p>
+          <strong>{num(views)}</strong>
+        </div>
+        {showApi ? (
           <div>
-            <span>API requests</span>
+            <p className="metric-label"><span>API requests</span><SourceBadge source="Sample" /></p>
             <strong>{num(requests)}</strong>
           </div>
-        ) : (
-          <>
-            <div>
-              <span>Visitors</span>
-              <strong>{num(visitors)}</strong>
-            </div>
-            <div>
-              <span>Views</span>
-              <strong>{num(views)}</strong>
-            </div>
-          </>
-        )}
-        {detail.source !== "api" ? (
-          <div>
-            <span>API requests</span>
-            <strong>{num(requests)}</strong>
-          </div>
-        ) : (
-          <>
-            <div>
-              <span>Visitors</span>
-              <strong>{num(visitors)}</strong>
-            </div>
-            <div>
-              <span>Views</span>
-              <strong>{num(views)}</strong>
-            </div>
-          </>
-        )}
+        ) : null}
       </div>
       <div className="table-wrap">
         <table>
@@ -1068,7 +1197,8 @@ function DayDetail({
               <th>Project</th>
               <th>Visitors</th>
               <th>Views</th>
-              <th>API</th>
+              <th>Web source</th>
+              {showApi ? <th>API <SourceBadge source="Sample" /></th> : null}
             </tr>
           </thead>
           <tbody>
@@ -1082,7 +1212,8 @@ function DayDetail({
                 </td>
                 <td className="num">{num(row.visitors)}</td>
                 <td className="num">{num(row.views)}</td>
-                <td className="num">{num(row.requests)}</td>
+                <td><SourceBadge source={webMetricSource(state, [row.id])} /></td>
+                {showApi ? <td className="num">{num(row.requests)}</td> : null}
               </tr>
             ))}
           </tbody>
@@ -1097,12 +1228,18 @@ function DayDetail({
   );
 }
 
-export function Stage({ state, bump, onOpen }: { state: AppState; bump: () => void; onOpen: (id: string) => void }) {
-  const operator = state.role === "operator" || state.role === "public";
+export function Stage({ state, bump, onOpen }: {
+  state: AppState;
+  bump: () => void;
+  onOpen: (id: string) => void;
+}) {
+  const publicMode = isPublic(state);
+  const operator = state.role === "operator" || publicMode;
+  const showApi = !publicMode && Boolean(state.apiMetrics);
   const ids = scopeIds(state);
   const data = headline(state, ids);
   if (state.view === "overview") {
-    const webBadge = state.umami ? "Umami" : "Sample";
+    const webBadge = webMetricSource(state, ids);
     const focus = state.chartFocus;
     return (
       <>
@@ -1131,53 +1268,48 @@ export function Stage({ state, bump, onOpen }: { state: AppState; bump: () => vo
               bump();
             }}
           />
-          <Kpi
-            label="API requests"
-            value={num(data.requests)}
-            hint={pct(data.errorRate) + " error rate"}
-            icon={apiIcon}
-            badge="Sample"
-            onSelect={() => {
-              state.view = "api";
-              bump();
-            }}
-          />
-          <Kpi
-            label="API latency · p95"
-            value={ms(data.p95)}
-            hint={"p50 " + ms(data.p50)}
-            icon={latencyIcon}
-            badge="Sample"
-            onSelect={() => {
-              state.view = "api";
-              bump();
-            }}
-          />
+          {showApi ? (
+            <>
+              <Kpi
+                label="API requests"
+                value={num(data.requests)}
+                hint={pct(data.errorRate) + " error rate"}
+                icon={apiIcon}
+                badge="Sample"
+                onSelect={() => {
+                  state.view = "api";
+                  bump();
+                }}
+              />
+              <Kpi
+                label="API latency · p95"
+                value={ms(data.p95)}
+                hint={"p50 " + ms(data.p50)}
+                icon={latencyIcon}
+                badge="Sample"
+                onSelect={() => {
+                  state.view = "api";
+                  bump();
+                }}
+              />
+            </>
+          ) : null}
         </section>
-        <SecondaryStats ids={ids} data={data} />
+        <SecondaryStats ids={ids} data={data} webSource={webBadge} />
         <Freshness state={state} />
         <Activity state={state} ids={ids} bump={bump} />
         <ProjectTable state={state} ids={ids} bump={bump} onOpen={onOpen} />
-        <PrivacyNote />
+        {!publicMode ? <PrivacyNote /> : null}
         <DetailSheet state={state} ids={ids} bump={bump} />
       </>
     );
   }
   if (state.view === "web") {
-    const rows = ids.flatMap((id) => stats(state, id).pages);
-    const total = rows.reduce((summed, row) => summed + row.views, 0) || 1;
-    const webBadge = state.umami ? "Umami" : "Sample";
+    const source = webMetricSource(state, ids);
+    const webBadge = source === "Live" ? undefined : source;
     const web = webHeadline(state, ids, data);
-    const breakdowns = new Map<string, Map<string, number>>();
-    for (const site of liveSites(state, ids)) {
-      for (const { label, rows } of site.extra) {
-        if (!rows.length) continue;
-        const counts = breakdowns.get(label) ?? new Map<string, number>();
-        for (const { name, count } of rows) counts.set(name, (counts.get(name) ?? 0) + count);
-        breakdowns.set(label, counts);
-      }
-    }
-    return (
+    const activeCounts = liveSites(state, ids).flatMap((site) => site.details?.activeVisitors == null ? [] : [site.details.activeVisitors]);
+    const summary = (
       <>
         <section className="kpis">
           <Kpi label="Pageviews" value={num(web.views)} hint={<Change value={data.delta.pageviews} goodWhenUp range={state.range} />} badge={webBadge} />
@@ -1189,131 +1321,34 @@ export function Stage({ state, bump, onOpen }: { state: AppState; bump: () => vo
           <section className="secondary-stats slim">
             <div><span>Visits</span><strong>{num(web.visits)}</strong></div>
             <div><span>Bounces</span><strong>{num(web.bounces)}</strong></div>
-            <div><span>Views / visit</span><strong>{web.visits ? (web.views / web.visits).toFixed(1) : "—"}</strong></div>
+            <div><span>Average views per visit</span><strong>{web.visits ? (web.views / web.visits).toFixed(1) : "—"}</strong></div>
+            {activeCounts.length ? <div><span>Active visitors · last 5 min</span><strong>{num(activeCounts.reduce((sum, count) => sum + count, 0))}</strong></div> : null}
           </section>
         ) : null}
         {web.visits === 0 && web.views === 0 ? (
           <p className="caption">Umami reports no web traffic for this period.</p>
         ) : null}
-        <FilterChip state={state} bump={bump} />
         <Freshness state={state} />
-        <MetricBoard state={state} ids={ids} bump={bump} />
-        <div className="plausible-grid">
-          <RankedPanel state={state} ids={ids} metric="pages" bump={bump} />
-          <RankedPanel state={state} ids={ids} metric="referrers" bump={bump} />
-          <RankedPanel state={state} ids={ids} metric="countries" bump={bump} />
-          <RankedPanel state={state} ids={ids} metric="devices" bump={bump} />
-        </div>
-        <div className="soft-tech">
-          <div className="soft-tabs" role="tablist" aria-label="Software breakdown">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={state.audienceSoft === "browsers"}
-              onClick={() => {
-                state.audienceSoft = "browsers";
-                bump();
-              }}
-            >
-              Browsers
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={state.audienceSoft === "os"}
-              onClick={() => {
-                state.audienceSoft = "os";
-                bump();
-              }}
-            >
-              Operating systems
-            </button>
-          </div>
-          <RankedPanel state={state} ids={ids} metric={state.audienceSoft} bump={bump} />
-        </div>
-        {breakdowns.size ? (
-          <div className="plausible-grid">
-            {[...breakdowns].map(([label, counts]) => (
-              <section className="panel ranked" key={label}>
-                <h2>{label}</h2>
-                <Bars rows={[...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)} />
-              </section>
-            ))}
-          </div>
+      </>
+    );
+    if (publicMode) return summary;
+    const sites = liveSites(state, ids);
+    return (
+      <>
+        {summary}
+        {!state.umami || sites.some((site) => site.seriesViews?.length) ? (
+          <>
+            <FilterChip state={state} bump={bump} />
+            <MetricBoard state={state} ids={ids} bump={bump} />
+          </>
         ) : null}
-        <section className="panel" style={{ marginTop: 12 }}>
-          <div className="panel-head">
-            <div>
-              <h2>{state.umami ? "Top paths" : "Normalized paths"}</h2>
-              <p>{state.umami ? "Pageview counts by path from Umami." : "Account, contract, and muxed addresses collapse so one key is not its own row."}</p>
-            </div>
-            <span className="badge">{state.umami ? "Umami" : "Sample data"}</span>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  {operator ? <th>Project</th> : null}
-                  <th>Path</th>
-                  <th>Views</th>
-                  <th>Visitors</th>
-                  <th>Bounce</th>
-                  <th>Duration</th>
-                  <th>Share</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows
-                  .slice()
-                  .sort((a, b) => b.views - a.views)
-                  .map((row) => (
-                    <tr
-                      key={row.tenantId + row.path}
-                      className={
-                        (state.metric === "pages" && state.slice.includes(row.path)) ||
-                        (state.detail?.kind === "path" && state.detail.tenantId === row.tenantId && state.detail.path === row.path)
-                          ? "row-on"
-                          : undefined
-                      }
-                      onClick={() => {
-                        const label = ids.length > 1 ? nameOf(row.tenantId) + " · " + row.path : row.path;
-                        if (!state.umami?.[row.tenantId]) {
-                          state.metric = "pages";
-                          state.slice = label;
-                        }
-                        state.detail = { kind: "path", tenantId: row.tenantId, path: row.path };
-                        bump();
-                      }}
-                      style={{ cursor: "pointer" }}
-                    >
-                      {operator ? (
-                        <td>
-                          <span className="who">
-                            <i className={"dot " + hueOf(row.tenantId)} />
-                            {nameOf(row.tenantId)}
-                          </span>
-                        </td>
-                      ) : null}
-                      <td>
-                        <code>{row.path}</code>
-                      </td>
-                      <td className="num">{num(row.views)}</td>
-                      <td className="num">{row.visitors == null ? "—" : num(row.visitors)}</td>
-                      <td className="num">{row.bounce == null ? "—" : pct(row.bounce)}</td>
-                      <td className="num">{row.duration == null ? "—" : duration(row.duration)}</td>
-                      <td className="num">{pct(row.views / total)}</td>
-                    </tr>
-                  ))}
-                {!rows.length ? <tr><td colSpan={operator ? 7 : 6}>No paths recorded in this period.</td></tr> : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <WebBreakdownTable state={state} ids={ids} bump={bump} />
+        {sites.some((site) => site.details?.performance) ? <WebPerformance state={state} ids={ids} /> : null}
         <DetailSheet state={state} ids={ids} bump={bump} />
       </>
     );
   }
-  if (state.view === "api") {
+  if (state.view === "api" && showApi) {
     const ok = data.requests - data.errors - data.client;
     const buckets = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
     const counts = buckets.map(() => 0);
@@ -1451,6 +1486,7 @@ export function Stage({ state, bump, onOpen }: { state: AppState; bump: () => vo
       </>
     );
   }
+  if (publicMode && state.view !== "compare") return null;
   if (state.view === "manage") return <Manage state={state} bump={bump} />;
   if (state.view === "privacy") return <Privacy state={state} bump={bump} />;
   if (state.view === "compare" && ids.length > 1) {
@@ -1460,14 +1496,15 @@ export function Stage({ state, bump, onOpen }: { state: AppState; bump: () => vo
       ["Visitors", num(left.visitors), num(right.visitors)],
       ["Bounce rate", pct(left.bounce), pct(right.bounce)],
       ["Visit duration", duration(left.duration), duration(right.duration)],
-      ["Top referrer", left.referrers[0]?.name || "—", right.referrers[0]?.name || "—"],
-      ["Top country", left.countries[0]?.name || "—", right.countries[0]?.name || "—"],
+    ];
+    if (showApi) metrics.push(
       ["API requests", num(left.requests), num(right.requests)],
       ["Error rate", pct(left.errorRate), pct(right.errorRate)],
       ["p95", ms(left.p95), ms(right.p95)],
-    ];
+    );
     return (
       <>
+        <ProjectRollout state={state} ids={ids} />
         <ProjectTable state={state} ids={ids} bump={bump} onOpen={onOpen} />
         <section className="panel" style={{ marginTop: 12 }}>
           <h2>Same numbers</h2>
@@ -1492,17 +1529,20 @@ export function Stage({ state, bump, onOpen }: { state: AppState; bump: () => vo
             </table>
           </div>
         </section>
-        <section className="panel" style={{ marginTop: 12 }}>
-          <h2>Routes</h2>
-          <Filters state={state} ids={ids} projects bump={bump} />
-          <ApiTable state={state} rows={visibleApi(state, ids)} showProject bump={bump} />
-        </section>
+        {showApi ? (
+          <section className="panel" style={{ marginTop: 12 }}>
+            <h2>Routes</h2>
+            <Filters state={state} ids={ids} projects bump={bump} />
+            <ApiTable state={state} rows={visibleApi(state, ids)} showProject bump={bump} />
+          </section>
+        ) : null}
       </>
     );
   }
   if (state.view === "compare") {
     return (
       <>
+        <ProjectRollout state={state} ids={ids} />
         {ids.map((id) => {
           const site = stats(state, id);
           const meta = PROFILES[id];
@@ -1511,11 +1551,13 @@ export function Stage({ state, bump, onOpen }: { state: AppState; bump: () => vo
             ["Visitors", num(site.visitors)],
             ["Bounce", pct(site.bounce)],
             ["Duration", duration(site.duration)],
+          ];
+          if (showApi) cells.push(
             ["API requests", num(site.requests)],
             ["Error rate", pct(site.errorRate)],
             ["p50", ms(site.p50)],
             ["p95", ms(site.p95)],
-          ];
+          );
           return (
             <article key={id} className={"panel project " + meta.hue}>
               <div className="name">
@@ -1751,7 +1793,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
                       <td className="mono">{row.proof}</td>
                       <td className="num">{site ? num(site.visitors) : "—"}</td>
                       <td className="num">{site ? num(site.views) : "—"}</td>
-                      <td className="num">{site ? num(site.requests) : "—"}</td>
+                      <td className="num">{site && state.apiMetrics?.[row.id] ? num(site.requests) : "—"}</td>
                       <td>
                         <span className={"pill " + pill[0]}>{row.missingUmamiId ? "Umami Website ID not yet generated" : pill[1]}</span>
                       </td>
@@ -2185,13 +2227,6 @@ function Integration({ state, bump }: { state: AppState; bump: () => void }) {
           if (extra) extra.api[key] = (extra.api[key] || 0) + 1;
           state.receipt = { tone: "ok", title: "Request counted", rows: [["Kept", body.retained || "route, status, latency"], ["Dropped", body.droppedSpans + " span, " + body.droppedLogs + " log"], ["Not returned", "trace id and log line"]] };
         } else state.receipt = { tone: "bad", title: "Request rejected", rows: [["Reason", body.error || String(response.status)]] };
-      } else if (action === "peek") {
-        const other = state.tenantId === "beta" ? "alpha" : "beta";
-        const response = await fetch("/metrics/api?tenant=" + other, { headers });
-        const body = await response.json();
-        state.receipt = response.status === 403
-          ? { tone: "blocked", title: "Refused, as designed", rows: [["Asked for", nameOf(other)], ["Response", "403"], ["Meaning", body.error || "a project cannot read another project"]] }
-          : { tone: "bad", title: "Isolation failed", rows: [["Response", String(response.status)]] };
       }
     } catch (error) {
       state.receipt = { tone: "bad", title: "Request failed", rows: [["Reason", error instanceof Error ? error.message : "error"]] };
@@ -2200,7 +2235,6 @@ function Integration({ state, bump }: { state: AppState; bump: () => void }) {
       bump();
     }
   }
-  const other = state.tenantId === "beta" ? "alpha" : "beta";
   const siteId = state.tenantId && PROFILES[state.tenantId] ? state.tenantId : "SITE_ID";
   return (
     <>
@@ -2208,7 +2242,7 @@ function Integration({ state, bump }: { state: AppState; bump: () => void }) {
         <div className="panel-head">
           <div>
             <h2>Install in two steps</h2>
-            <p>Web uses a pinned script. API dual-exports OpenTelemetry to this collector. A project key only sees its own rows.</p>
+            <p>Web uses a pinned script. API dual-exports OpenTelemetry to this collector. The tenant demo shows one project at a time.</p>
           </div>
           <span className="badge">Live collector</span>
         </div>
@@ -2262,11 +2296,6 @@ function Integration({ state, bump }: { state: AppState; bump: () => void }) {
               <button className="card compact" type="button" onClick={() => { state.view = "compare"; bump(); }}>
                 <strong>Compare projects</strong>
                 <span>Same web and API numbers, side by side.</span>
-              </button>
-            ) : availableProject(state, other) ? (
-              <button className="card compact" type="button" disabled={state.busy} onClick={() => run("peek")}>
-                <strong>Read {nameOf(other)}</strong>
-                <span>Ask for the other project with this key. It should be refused.</span>
               </button>
             ) : null}
           </div>

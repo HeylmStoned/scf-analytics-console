@@ -40,11 +40,9 @@ export function GroupedChart({
   const focusPinned = pinned != null || (hover == null && latest != null);
 
   function pin(index: number) {
-    setPinned((current) => {
-      const next = current === index ? null : index;
-      onPin?.(next);
-      return next;
-    });
+    const next = pinned === index ? null : index;
+    setPinned(next);
+    onPin?.(next);
   }
 
   function place(event: React.MouseEvent<HTMLDivElement> | React.FocusEvent<HTMLDivElement>, index: number) {
@@ -141,12 +139,14 @@ export function GroupedChart({
 
 export function Donut({
   rows,
+  label,
   large,
   active,
   onPick,
   colors,
 }: {
-  rows: { name: string; count: number }[];
+  rows: { name: string; count: number; detail?: string }[];
+  label?: string;
   large?: boolean;
   active?: string;
   onPick?: (name: string) => void;
@@ -166,7 +166,7 @@ export function Donut({
   const current = drawn.find((row) => row.name === hover);
   return (
     <div className="pie-wrap" onMouseLeave={() => setHover(null)}>
-      <svg className={"donut" + (large ? " large" : "")} viewBox={"0 0 " + size + " " + size} role="img">
+      <svg className={"donut" + (large ? " large" : "")} viewBox={"0 0 " + size + " " + size} role="img" aria-label={label}>
         {drawn.length === 1 ? (
           <circle cx={center} cy={center} r={radius} fill="none" stroke={palette[0]} strokeWidth={width} onMouseMove={() => setHover(drawn[0].name)} />
         ) : (
@@ -178,7 +178,7 @@ export function Donut({
             const node = (
               <circle
                 key={row.name}
-                className="slice"
+                className={onPick ? "slice interactive" : "slice"}
                 cx={center}
                 cy={center}
                 r={radius}
@@ -200,13 +200,7 @@ export function Donut({
       {current ? (
         <div className="tip">
           <strong>{current.name}</strong>
-          <div>
-            <i className="swatch" style={{ background: palette[drawn.indexOf(current) % palette.length] }} />
-            Share<b>{pct(current.count / total)}</b>
-          </div>
-          <div>
-            Count<b>{num(current.count)}</b>
-          </div>
+          {current.detail ? <div>{current.detail}</div> : null}
         </div>
       ) : null}
     </div>
