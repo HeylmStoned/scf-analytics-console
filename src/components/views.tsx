@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { CountryMap } from "@/components/CountryMap";
+import { ProjectIcon } from "@/components/ProjectIcon";
 import { Bars, Donut, GroupedChart, Stack, type ChartSeries } from "@/components/charts";
 import {
   ACCOUNT,
@@ -21,7 +22,6 @@ import {
   duration,
   erasureImpact,
   headline,
-  hueOf,
   isPublic,
   listingOf,
   ms,
@@ -375,7 +375,7 @@ function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: stri
                 <tr key={row.id}>
                   <td>
                     <span className="who">
-                      <i className={"avatar tiny " + row.meta.hue}>{row.meta.name[0]}</i>
+                      <ProjectIcon id={row.id} />
                       <span>
                         <strong>{row.meta.name}</strong>
                         <span className="quiet">{row.meta.detail}</span>
@@ -418,7 +418,7 @@ function ProjectRollout({ state, ids }: { state: AppState; ids: string[] }) {
   const projects = [
     ...ids.map((id) => ({ name: nameOf(id), status: "Available" })),
     ...(!state.betaConfigured ? [{ name: nameOf("beta"), status: "Awaiting Umami ID" }] : []),
-    { name: "Prism.fi", status: "Will be added to the dashboard" },
+    { name: "Lend.xyz", status: "Awaiting Umami ID" },
   ];
   return (
     <section className="panel project-rollout">
@@ -537,7 +537,7 @@ function WebBreakdownTable({ state, ids, bump }: { state: AppState; ids: string[
                   state.detail = { kind: "path", tenantId: row.tenantId, path: row.path, sample: !available };
                   bump();
                 }}>{row.path}</button></td>
-                {showProject ? <td>{nameOf(row.tenantId)}</td> : null}
+                {showProject ? <td><span className="who"><ProjectIcon id={row.tenantId} compact />{nameOf(row.tenantId)}</span></td> : null}
                 <td className="num">{num(row.views)}</td>
                 <td className="num">{row.visitors == null ? "—" : num(row.visitors)}</td>
                 <td className="num">{row.visits == null ? "—" : num(row.visits)}</td>
@@ -794,7 +794,7 @@ function ApiTable({ state, rows, showProject, bump }: { state: AppState; rows: R
                 {showProject ? (
                   <td>
                     <span className="who">
-                      <i className={"dot " + hueOf(row.tenantId)} />
+                      <ProjectIcon id={row.tenantId} compact />
                       {nameOf(row.tenantId)}
                     </span>
                   </td>
@@ -1206,7 +1206,7 @@ function DayDetail({
               <tr key={row.id}>
                 <td>
                   <span className="who">
-                    <i className={"dot " + hueOf(row.id)} />
+                    <ProjectIcon id={row.id} compact />
                     {nameOf(row.id)}
                   </span>
                 </td>
@@ -1513,8 +1513,8 @@ export function Stage({ state, bump, onOpen }: {
               <thead>
                 <tr>
                   <th>Metric</th>
-                  <th>{nameOf(left.id)}</th>
-                  <th>{nameOf(right.id)}</th>
+                  <th><span className="who"><ProjectIcon id={left.id} compact />{nameOf(left.id)}</span></th>
+                  <th><span className="who"><ProjectIcon id={right.id} compact />{nameOf(right.id)}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1561,7 +1561,7 @@ export function Stage({ state, bump, onOpen }: {
           return (
             <article key={id} className={"panel project " + meta.hue}>
               <div className="name">
-                <i className={"dot " + meta.hue} />
+                <ProjectIcon id={id} compact />
                 {meta.name}
               </div>
               <p className="quiet">{meta.detail}</p>
@@ -1607,7 +1607,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
       id,
       name: PROFILES[id].name,
       detail: PROFILES[id].detail,
-      proof: id === "alpha" ? "stellar.toml" : "Soroban contract",
+      proof: missingUmamiId ? "Umami script pending" : "Umami script added",
       status: missingUmamiId ? "pending" : listingOf(state, id),
       live: !missingUmamiId,
       missingUmamiId,
@@ -1783,7 +1783,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
                     <tr key={row.id}>
                       <td>
                         <span className="who">
-                          <i className={"avatar tiny " + (PROFILES[row.id]?.hue || "lavender")}>{(row.name || row.id)[0]}</i>
+                          <ProjectIcon id={row.id} name={row.name} />
                           <span>
                             <strong>{row.name}</strong>
                             <span className="quiet">{row.detail} · <span className="mono">{row.id}</span></span>

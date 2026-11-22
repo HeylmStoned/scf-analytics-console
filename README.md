@@ -18,7 +18,9 @@ The welcome page explains the demo and links to the project GitBook in its initi
 | **SCF** | See available and planned projects in **Projects**, compare their analytics, and preview listing, enrollment, and erasure in **SCF managing** and **Data & privacy**. **Export data** downloads aggregate JSON. Selecting a project in **API** limits the export to that project. |
 | **Tenant** | Review the selected project's web and sample API metrics. **Export data from your project** exports only that project's analytics. |
 
-**SCF → Projects** shows the demo site, Lend.xyz awaiting its Umami website ID, and Prism.fi as a project to be added. New Stellar projects will appear as their analytics are connected.
+**SCF → Projects** shows the demo site, Prismfi.cc when configured, and Lend.xyz awaiting its Umami website ID. New Stellar projects will appear as their analytics are connected.
+
+**SCF managing** records Umami script installation as the proof of setup. Overview, project tables, and the workspace selector use locally served copies of the official favicons. [Prismfi.cc favicon](https://prismfi.cc/favicon.ico) · [Lend.xyz favicon](https://lend.xyz/favicon.ico)
 
 **Roadmap** follows **Overview** in the navigation. Its interactive timeline covers weeks 8, 12, and 16, with deliverables and completion criteria for each tranche. The proposal targets production in **week 16** and includes **12 months of hosting and support** after the final tranche is approved.
 
@@ -51,13 +53,13 @@ Copy [`.env.example`](.env.example) to `.env.local` and fill in the settings for
 | `UMAMI_API_KEY` | Server-side [Umami Cloud API key](https://docs.umami.is/docs/cloud/api-key) |
 | `UMAMI_API_CLIENT_ENDPOINT` | API endpoint for key-based authentication. Defaults to `https://api.umami.is/v1`. |
 | `UMAMI_ALPHA` | Umami website ID for scf-umami-poc-production.up.railway.app |
-| `UMAMI_BETA` | Optional Umami website ID for Lend.xyz |
+| `UMAMI_BETA` | Umami website ID for Prismfi.cc |
 | `UMAMI_PUBLIC_PROJECTS` | Comma-separated project IDs approved for live Umami reporting in the POC. Defaults to `alpha`. Set it to an empty value to disable live reporting. |
 | `UMAMI_URL` | Base URL for self-hosted username/password authentication |
 | `UMAMI_USER` | Self-hosted account name. Defaults to `admin`. |
 | `UMAMI_PASSWORD` | Self-hosted account password |
 
-Set `UMAMI_ALPHA` to connect the demo site. Add `UMAMI_BETA` when the Lend.xyz property is ready, and include `beta` in `UMAMI_PUBLIC_PROJECTS` once its aggregate metrics are approved for the demo. Restart the dev server after changing the configuration.
+Set `UMAMI_ALPHA` for the demo site and `UMAMI_BETA` for Prismfi.cc. Set `UMAMI_PUBLIC_PROJECTS=alpha,beta` to enable live analytics for both projects in the POC. Public shows their web totals, while SCF and Tenant can open the country-level and other web breakdowns. Restart the dev server after changing the configuration.
 
 ## Code map
 

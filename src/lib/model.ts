@@ -196,7 +196,6 @@ export type AppState = {
   enrollOpen: boolean;
   enrollId: string;
   enrollName: string;
-  enrollProof: "stellar.toml" | "contract" | "scf";
   enrollStep: "details" | "confirm" | "done";
   enrollToken: string;
   enrollResult: string;
@@ -276,8 +275,8 @@ export const PROFILES: Record<string, Profile> = {
     ],
   },
   beta: {
-    name: "Lend.xyz",
-    detail: "Markets",
+    name: "Prismfi.cc",
+    detail: "Stellar project",
     hue: "coral",
     pageviews: 30110,
     visitors: 9800,
@@ -365,7 +364,7 @@ export function createState(betaConfigured = false, publicProjects = ["alpha"]):
     privacyConfirm: "",
     privacyStep: "",
     privacyError: "",
-    waiting: [{ id: "quill", name: "Quill", detail: "Sample application", proof: "SCF project link", status: "pending" }],
+    waiting: [{ id: "lend", name: "Lend.xyz", detail: "Awaiting Umami website ID", proof: "Umami script pending", status: "pending" }],
     keys: [{ id: "live", name: "Ecosystem reader", hint: "scf_mtr_9f3a2c1e", revoked: false, scope: "global" }],
     chartFocus: "both",
     webReport: "pages",
@@ -381,7 +380,6 @@ export function createState(betaConfigured = false, publicProjects = ["alpha"]):
     enrollOpen: false,
     enrollId: "",
     enrollName: "",
-    enrollProof: "stellar.toml",
     enrollStep: "details",
     enrollToken: "",
     enrollResult: "",

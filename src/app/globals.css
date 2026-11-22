@@ -133,6 +133,11 @@ th .kpi-badge { margin-left: 4px; }
 .mini div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
 .avatar.tiny { width: 28px; height: 28px; border-radius: 8px; }
 .avatar.coral { background: #f0a090; }
+.project-icon.compact { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
+.project-icon.branded { background: #f2efe6; border: 1px solid #d7d1c4; padding: 2px; overflow: hidden; }
+.project-icon.branded.compact { width: 22px; height: 22px; }
+.project-icon.branded[data-project-icon="lend"] { background: #28292a; border-color: #827c73; padding: 0; }
+.project-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .who { display: inline-flex; align-items: center; gap: 8px; }
 .who strong { display: block; font-weight: 600; }
 .table-tools { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -462,14 +467,6 @@ tr.row-on td { background: rgba(212, 196, 255, 0.08); }
 .enroll-modal .lede { margin-top: 6px; margin-bottom: 4px; }
 .field-hint { color: var(--faint); font-size: 12.5px; margin-top: 6px; }
 .field-label { margin-top: 14px; color: var(--muted); font-size: 13px; }
-.proof-picks { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 8px; }
-.proof-picks button {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  text-align: left; padding: 10px 12px; border-radius: 12px;
-}
-.proof-picks button[aria-pressed="true"] { border-color: rgba(212, 196, 255, 0.7); background: rgba(212, 196, 255, 0.08); }
-.proof-picks strong { color: var(--text); font-weight: 600; }
-.proof-picks small { color: var(--muted); }
 .enroll-summary { margin: 14px 0 0; display: grid; gap: 10px; }
 .enroll-summary div {
   display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px;

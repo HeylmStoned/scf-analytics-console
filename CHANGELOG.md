@@ -6,12 +6,14 @@
 
 - Rendered the welcome text and project GitBook link in the initial HTML so reviewers can read them before JavaScript runs. The welcome page explains which metrics are live and which are simulated.
 - Opened the Public, SCF, and Tenant demo perspectives without a sign-in step. The Workspace menu switches between perspectives.
-- Added the SCF project rollout chart with the demo site, Lend.xyz awaiting its Umami website ID, and Prism.fi as a project to be added.
+- Added the SCF project rollout chart with the demo site, Prismfi.cc, and Lend.xyz awaiting its Umami website ID. SCF managing lists Lend.xyz as pending and uses Umami script installation as the proof.
+- Added the official Prismfi.cc and Lend.xyz favicons to Overview, project tables, and the workspace selector. The console serves them locally and uses contrasting tiles for the dark theme.
 - Added the Roadmap after Overview, with delivery tranches at weeks 8, 12, and 16. Each tranche lists deliverables and completion criteria. The navigation also links directly to the project GitBook.
 - Added Dark Reader compatibility metadata for the console's built-in dark theme.
 
 ### Analytics and privacy
 
+- Connected Prismfi.cc as the second Umami site through `UMAMI_BETA`.
 - Added the Umami tracker and server-side API key support. The demo works with `UMAMI_ALPHA` alone, and `.env.example` documents the optional second site and live project allowlist.
 - Limited Public to aggregate website totals and the period-level Web Activity chart. SCF and Tenant show web activity over time when available.
 - Combined Top pages, Countries, Referrers, Devices, Browsers, and Operating systems into a single tabbed table. The Countries map supports zoom, drag, and selection.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ProjectIcon } from "@/components/ProjectIcon";
 import { Roadmap } from "@/components/Roadmap";
 import { Stage } from "@/components/views";
 import { API_METRICS_NOTICE, PROFILES, RANGE_LABELS, RANGES, SNIPPET, availableProject, createState, headline, isPublic, nameOf, scopeIds, webMetricSource, windowLabel, type ApiFixture, type AppState, type LiveProject, type RangeKey } from "@/lib/model";
@@ -239,7 +240,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
             <div className="tenant-pick">
               {tenants.map((tenant) => (
                 <button key={tenant.id} type="button" onClick={() => enterTenant(tenant.id)}>
-                  <span className={"avatar " + (PROFILES[tenant.id]?.hue || "lavender")}>{(PROFILES[tenant.id]?.name || tenant.id)[0]}</span>
+                  <ProjectIcon id={tenant.id} />
                   <span>
                     <strong>{PROFILES[tenant.id]?.name || tenant.id}</strong>
                     <span>{PROFILES[tenant.id]?.detail || "Project workspace"}</span>
@@ -339,7 +340,6 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
     current.enrollStep = "details";
     current.enrollId = "";
     current.enrollName = "";
-    current.enrollProof = "stellar.toml";
     current.enrollToken = "";
     current.enrollResult = "";
     bump();
@@ -349,13 +349,6 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
     current.enrollOpen = false;
     bump();
   }
-
-  const proofLabel =
-    current.enrollProof === "stellar.toml"
-      ? "stellar.toml"
-      : current.enrollProof === "contract"
-        ? "Soroban contract"
-        : "SCF project link";
 
   async function enroll(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -393,7 +386,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
           id,
           name: label,
           detail: "Just enrolled",
-          proof: proofLabel,
+          proof: "Umami script pending",
           status: current.approval ? "pending" : "hidden",
         });
       }
@@ -424,7 +417,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
           <p className="kicker">Workspace</p>
           <div className="workspace-menu">
             <button type="button" aria-haspopup="listbox" aria-expanded={current.menuOpen} onClick={() => { current.menuOpen = !current.menuOpen; bump(); }}>
-              <span className="avatar">{workspaceMark}</span>
+              {current.mode === "tenant" && current.tenantId ? <ProjectIcon id={current.tenantId} /> : <span className="avatar">{workspaceMark}</span>}
               <span>{workspaceLabel}</span>
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
                 <path d="M3 5.2 7 9l4-3.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
@@ -441,7 +434,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
               </button>
               {current.roster.tenants.filter((tenant) => availableProject(current, tenant.id)).map((tenant) => (
                 <button key={tenant.id} type="button" aria-pressed={current.role === tenant.id} onClick={() => enterTenant(tenant.id)}>
-                  <span className="avatar">{(PROFILES[tenant.id]?.name || tenant.id)[0]}</span>
+                  <ProjectIcon id={tenant.id} />
                   <span>{PROFILES[tenant.id]?.name || tenant.id}</span>
                 </button>
               ))}
@@ -594,30 +587,8 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
                   />
                 </label>
                 <p className="field-hint">Used in the script tag and API tenant id. Letters, numbers, hyphens.</p>
-                <p className="field-label">Stellar proof</p>
-                <div className="proof-picks" role="radiogroup" aria-label="Stellar proof">
-                  {(
-                    [
-                      ["stellar.toml", "stellar.toml", "Hosted domain proof"],
-                      ["contract", "Soroban contract", "Contract id on network"],
-                      ["scf", "SCF project", "Community Fund listing"],
-                    ] as const
-                  ).map(([value, title, note]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className="ghost"
-                      aria-pressed={current.enrollProof === value}
-                      onClick={() => {
-                        current.enrollProof = value;
-                        bump();
-                      }}
-                    >
-                      <strong>{title}</strong>
-                      <small>{note}</small>
-                    </button>
-                  ))}
-                </div>
+                <p className="field-label">Proof of installation</p>
+                <p className="field-hint">Add the Umami tracking script to the project website to complete the setup.</p>
                 <div className="modal-actions">
                   <button className="ghost" type="button" onClick={closeEnroll}>Cancel</button>
                   <button className="primary" type="submit">Continue</button>
@@ -631,7 +602,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
                 <dl className="enroll-summary">
                   <div><dt>Name</dt><dd>{current.enrollName.trim() || current.enrollId}</dd></div>
                   <div><dt>Project id</dt><dd className="mono">{current.enrollId}</dd></div>
-                  <div><dt>Proof</dt><dd>{proofLabel}</dd></div>
+                  <div><dt>Proof</dt><dd>Umami tracking script</dd></div>
                   <div><dt>Dashboard</dt><dd>Hidden until SCF lists it</dd></div>
                 </dl>
                 <div className="modal-actions">
@@ -686,7 +657,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
                 .filter((tenant) => availableProject(current, tenant.id))
                 .map((tenant) => (
                   <button key={tenant.id} type="button" aria-pressed={current.role === tenant.id} onClick={() => enterTenant(tenant.id)}>
-                    <span className={"avatar " + (PROFILES[tenant.id]?.hue || "lavender")}>{(PROFILES[tenant.id]?.name || tenant.id)[0]}</span>
+                    <ProjectIcon id={tenant.id} />
                     <span>
                       <strong>{PROFILES[tenant.id]?.name || tenant.id}</strong>
                       <span>{PROFILES[tenant.id]?.detail || "Project workspace"}</span>
