@@ -503,6 +503,31 @@ tr:hover td { background: rgba(243, 239, 230, 0.02); }
 .install pre { grid-column: 1 / -1; margin: 8px 0 0; padding: 12px 14px; overflow: auto; background: #100f0d; border-radius: 12px; color: #e7e1d6; line-height: 1.55; }
 .empty { color: var(--muted); padding: 8px 0 12px; }
 .caption { color: var(--faint); font-size: 12.5px; margin-top: 12px; }
+.poc-ssr-landing {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 28px 24px 8px;
+  color: var(--ink);
+}
+.poc-ssr-landing h1 {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 520;
+  letter-spacing: -0.03em;
+  margin: 6px 0 10px;
+}
+.poc-ssr-landing p {
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+.poc-ssr-landing strong { color: var(--ink); font-weight: 600; }
+.poc-ssr-landing a {
+  color: var(--accent, #9b8cff);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .gate form, .gate-panel { width: min(420px, 100%); padding: 22px; }
 .gate-panel { width: min(560px, 100%); }
