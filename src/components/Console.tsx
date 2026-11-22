@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ProjectIcon } from "@/components/ProjectIcon";
 import { Roadmap } from "@/components/Roadmap";
 import { Stage } from "@/components/views";
-import { PROFILES, RANGE_LABELS, RANGES, SNIPPET, createState, headline, isPublic, nameOf, scopeIds, windowLabel, type AppState, type LiveProject, type RangeKey } from "@/lib/model";
+import { API_METRICS_NOTICE, PROFILES, RANGE_LABELS, RANGES, SNIPPET, availableProject, createState, headline, isPublic, nameOf, profileOf, scopeIds, webMetricSource, windowLabel, type ApiFixture, type AppState, type LiveProject, type RangeKey } from "@/lib/model";
 
 const MARK = "M12.003 1.716c-1.37 0-2.7.27-3.948.78A10.18 10.18 0 0 0 2.66 7.901a10.136 10.136 0 0 0-.797 3.954c0 .258.01.516.027.775a1.942 1.942 0 0 1-1.055 1.88L0 14.934v1.902l2.463-1.26.072-.032v.005l.77-.39.758-.385.066-.039 14.807-7.56 1.666-.847 3.392-1.732V2.694L17.792 5.86 3.744 13.025l-.104.055-.017-.115a8.286 8.286 0 0 1-.071-1.105c0-2.255.88-4.377 2.474-5.977a8.462 8.462 0 0 1 2.71-1.82 8.513 8.513 0 0 1 3.2-.654h.067a8.41 8.41 0 0 1 4.09 1.055l1.628-.83.126-.066a10.11 10.11 0 0 0-5.845-1.853zM24 7.143 5.047 16.808l-1.666.847L0 19.382v1.902l3.282-1.671 2.91-1.485 14.058-7.153.105-.055.016.115c.05.369.072.743.072 1.11 0 2.255-.88 4.383-2.475 5.978a8.461 8.461 0 0 1-2.71 1.82 8.305 8.305 0 0 1-3.2.654h-.06c-1.441 0-2.86-.369-4.102-1.061l-.066.033-1.683.857c.594.418 1.232.776 1.903 1.062a10.11 10.11 0 0 0 3.947.797 10.09 10.09 0 0 0 7.17-2.975 10.136 10.136 0 0 0 2.969-7.18c0-.259-.005-.523-.027-.781a1.942 1.942 0 0 1 1.055-1.88L24 9.044z";
 
@@ -13,8 +14,8 @@ const COPY: Record<string, (wide: boolean, name: string, detail: string) => [str
       ? ["Ecosystem overview", "Shared web and API usage across Stellar projects."]
       : [name + " overview", "Only this project. Other tenants stay hidden."],
   web: (wide) => ["Web analytics", wide ? "Pages, referrers, country, device, and browser across projects." : "Pages, referrers, country, device, and browser."],
-  api: () => ["API analytics", "Volume, status, and latency for the selected range."],
-  compare: (wide) => ["Projects", wide ? "Sort, filter, and read projects side by side." : "This key can see only its own project."],
+  api: () => ["API analytics", API_METRICS_NOTICE],
+  compare: (wide) => ["Projects", wide ? "Compare available projects. More Stellar projects will be added to the analytics dashboard over time." : "View analytics for this project."],
   integration: () => ["Integration", "Pin the web script, then dual-export the API collector."],
   manage: () => ["SCF managing", "Enrollment policy, dashboard listing, and operator metrics keys."],
   roadmap: () => ["Roadmap", "Proposed delivery milestones, deliverables and completion criteria."],
@@ -23,28 +24,76 @@ const COPY: Record<string, (wide: boolean, name: string, detail: string) => [str
 
 const RANGE_VIEWS = new Set(["overview", "web", "api", "compare"]);
 
-export function Console() {
-  const state = useRef<AppState>(createState());
+const WEB_REPORT_VIEWS = new Set(["overview", "web", "compare", "manage"]);
+
+type UmamiResult = { scope: string; projects: Record<string, LiveProject> | null; directory?: AppState["managedSites"]; error?: string };
+
+export function Console({ introduction, umamiSites }: {
+  introduction: ReactNode;
+  umamiSites: AppState["umamiSites"];
+}) {
+  const state = useRef<AppState>(createState(umamiSites));
+  const [report, setReport] = useState<UmamiResult | null>(null);
+  const [traffic, setTraffic] = useState<{ scope: string; projects?: Record<string, ApiFixture>; error?: string } | null>(null);
   const [, setTick] = useState(0);
   const [booting, setBooting] = useState(true);
   const [tenantPicker, setTenantPicker] = useState(false);
   const bump = () => setTick((value) => value + 1);
   const current = state.current;
 
-  async function loadUmami(range = current.range) {
-    try {
-      const response = await fetch("/api/umami?range=" + encodeURIComponent(range));
-      if (!response.ok) return;
-      const body = (await response.json()) as { projects?: Record<string, LiveProject> };
-      if (!body.projects) return;
-      current.umami = body.projects;
-      const first = body.projects.alpha || body.projects.beta;
-      current.umamiLabels = first?.labels || null;
-      current.umamiWhen = first?.when || null;
-    } catch {
-      current.umami = null;
-    }
-  }
+  const { mode, view, tenantId, range } = current;
+  const scope = WEB_REPORT_VIEWS.has(view) && mode
+    ? new URLSearchParams({ mode, view, tenant: tenantId, range }).toString()
+    : "";
+  const trafficScope = mode === "scf" || mode === "tenant"
+    ? new URLSearchParams({ mode, tenant: tenantId }).toString()
+    : "";
+  const activeTraffic = traffic?.scope === trafficScope ? traffic : null;
+  current.apiMetrics = activeTraffic?.projects ?? null;
+  const activeReport = report?.scope === scope ? report : null;
+  const first = Object.values(activeReport?.projects ?? {})[0];
+  current.umami = activeReport?.projects ?? null;
+  current.managedSites = activeReport?.directory ?? null;
+  current.umamiLabels = first?.labels ?? null;
+  current.umamiWhen = first?.when ?? null;
+
+  useEffect(() => {
+    if (!scope) return;
+    const controller = new AbortController();
+    fetch("/api/umami?" + scope, {
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) {
+        const error = response.status === 404 ? "No project with recorded pageviews is available for this workspace."
+          : "Umami metrics are temporarily unavailable.";
+        if (!controller.signal.aborted) setReport({ scope, projects: null, error });
+        return;
+      }
+      const body = (await response.json()) as Pick<UmamiResult, "projects" | "directory">;
+      if (!controller.signal.aborted) setReport({ scope, ...body });
+    }).catch(() => {
+      if (!controller.signal.aborted) setReport({ scope, projects: null, error: "Umami metrics are temporarily unavailable." });
+    });
+    return () => controller.abort();
+  }, [scope]);
+
+  useEffect(() => {
+    if (!trafficScope) return;
+    const controller = new AbortController();
+    fetch("/metrics/api?" + trafficScope, {
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) {
+        if (!controller.signal.aborted) setTraffic({ scope: trafficScope, error: "API metrics are temporarily unavailable." });
+        return;
+      }
+      const { projects } = await response.json() as { projects: Record<string, ApiFixture> };
+      if (!controller.signal.aborted) setTraffic({ scope: trafficScope, projects });
+    }).catch(() => {
+      if (!controller.signal.aborted) setTraffic({ scope: trafficScope, error: "API metrics are temporarily unavailable." });
+    });
+    return () => controller.abort();
+  }, [trafficScope]);
 
   function selectRole(role: string, token: string, tenantId: string, mode?: AppState["mode"]) {
     current.role = role;
@@ -62,7 +111,7 @@ export function Console() {
 
   function enterPublic() {
     setTenantPicker(false);
-    selectRole("public", current.roster?.operatorToken || "", "", "public");
+    selectRole("public", "", "", "public");
     current.view = "overview";
     bump();
   }
@@ -76,7 +125,7 @@ export function Console() {
 
   function enterTenant(id: string) {
     const tenant = current.roster?.tenants.find((item) => item.id === id);
-    if (!tenant) return;
+    if (!tenant || !availableProject(current, id)) return;
     setTenantPicker(false);
     selectRole(tenant.id, tenant.token, tenant.id, "tenant");
     current.view = "overview";
@@ -105,19 +154,23 @@ export function Console() {
   useEffect(() => {
     let stop = false;
     (async () => {
-      const roster = await fetch("/demo/roster");
-      if (stop) return;
-      if (roster.ok) {
-        current.roster = await roster.json();
+      try {
+        const roster = await fetch("/demo/roster");
+        if (!roster.ok) throw new Error("Demo roster unavailable");
+        const data = await roster.json();
+        if (stop) return;
+        current.roster = data;
         current.token = current.roster?.operatorToken || "";
         current.role = "";
         current.mode = "";
         current.gateStep = "modes";
-        await loadUmami("30d");
-      } else current.gateError = "The demo roster did not load.";
-      if (!stop) {
-        setBooting(false);
-        bump();
+      } catch {
+        if (!stop) current.gateError = "The demo roster did not load.";
+      } finally {
+        if (!stop) {
+          setBooting(false);
+          bump();
+        }
       }
     })();
     return () => {
@@ -129,16 +182,19 @@ export function Console() {
 
   useEffect(() => {
     const wide = current.role === "operator" || current.role === "public";
-    const title = COPY[current.view]?.(wide, nameOf(current.tenantId), PROFILES[current.tenantId]?.detail || "This project")[0];
+    const title = COPY[current.view]?.(wide, nameOf(current.tenantId, current.umamiSites), PROFILES[current.tenantId]?.detail || "This project")[0];
     if (title && !booting && current.role) document.title = title + " · Stellar ecosystem analytics";
     else if (!booting && !current.role) document.title = "Choose a view · Stellar ecosystem analytics";
   });
 
   if (booting) {
     return (
-      <div className="gate">
-        <p className="eyebrow">Web and API analytics</p>
-      </div>
+      <main className="gate">
+        <div className="panel gate-panel gate-home">
+          {introduction}
+          <noscript><p className="caption">Enable JavaScript to open the interactive dashboards.</p></noscript>
+        </div>
+      </main>
     );
   }
 
@@ -161,8 +217,8 @@ export function Console() {
             else selectRole("token", token, "", "tenant");
           }}
         >
-          <p className="eyebrow">Web and API analytics</p>
-          <h1>Open a project</h1>
+          {introduction}
+          <h2>Open a project</h2>
           <p className="lede">Paste a project or operator token.</p>
           <input name="token" autoComplete="off" placeholder="Token" />
           <button type="submit">Open</button>
@@ -173,21 +229,21 @@ export function Console() {
   }
 
   if (!current.role) {
-    const tenants = (current.roster.tenants || []).filter((tenant) => PROFILES[tenant.id]);
+    const tenants = (current.roster.tenants || []).filter((tenant) => availableProject(current, tenant.id));
     if (current.gateStep === "tenant") {
       return (
         <div className="gate">
           <div className="panel gate-panel">
-            <p className="eyebrow">Reviewer access</p>
-            <h1>Choose a tenant</h1>
+            {introduction}
+            <h2>Choose a tenant</h2>
             <p className="lede">Open one project workspace. Other tenants stay hidden.</p>
             <div className="tenant-pick">
               {tenants.map((tenant) => (
                 <button key={tenant.id} type="button" onClick={() => enterTenant(tenant.id)}>
-                  <span className={"avatar " + (PROFILES[tenant.id]?.hue || "lavender")}>{(PROFILES[tenant.id]?.name || tenant.id)[0]}</span>
+                  <ProjectIcon id={tenant.id} />
                   <span>
-                    <strong>{PROFILES[tenant.id]?.name || tenant.id}</strong>
-                    <span>{PROFILES[tenant.id]?.detail || "Project workspace"}</span>
+                    <strong>{nameOf(tenant.id, current.umamiSites)}</strong>
+                    <span>{profileOf(tenant.id, current.umamiSites).domain || profileOf(tenant.id).detail}</span>
                   </span>
                 </button>
               ))}
@@ -202,24 +258,13 @@ export function Console() {
     return (
       <div className="gate">
         <div className="panel gate-panel gate-home">
-          <p className="eyebrow">Proof of concept</p>
-          <h1>Stellar ecosystem analytics</h1>
-          <p className="lede">
-            Reviewer console for a shared, free web and API analytics service for Stellar projects.
-            This page is a UI prototype — not production hosting, ingest, or tenant isolation.
-          </p>
-          <div className="home-facts">
-            <p><strong>Real today.</strong> Interactive Public / SCF / Tenant layouts, roadmap, and (when configured) live web aggregates from Umami.</p>
-            <p><strong>Fictional / sample.</strong> API request counts, latency, and most enrollment / key / erase flows use demo fixtures or session state that resets on reload.</p>
-            <p><strong>Design docs.</strong> Full architecture, privacy, and availability commitments:{" "}
-              <a href="https://scf.gitbook.io/scf-docs-1" target="_blank" rel="noreferrer">GitBook</a>.
-            </p>
-          </div>
-          <p className="lede home-choose">Choose a view. You can switch anytime from the workspace menu.</p>
+          {introduction}
+          <h2>Choose a view</h2>
+          <p className="lede">Three demo modes for reviewers. You can switch anytime from the workspace menu.</p>
           <div className="mode-grid">
             <button type="button" onClick={enterPublic}>
               <strong>Public</strong>
-              <small>Read-only ecosystem dashboard for listed projects.</small>
+              <small>Read-only website metrics for listed projects.</small>
             </button>
             <button type="button" onClick={enterScf}>
               <strong>SCF</strong>
@@ -244,22 +289,33 @@ export function Console() {
 
   const operator = current.role === "operator";
   const publicMode = isPublic(current);
+  const showReportStatus = Boolean(scope && !activeReport);
+  const fallbackMessage = activeReport?.error;
   const wide = operator || publicMode;
-  const profile = PROFILES[current.tenantId];
+  const profile = current.tenantId ? profileOf(current.tenantId, current.umamiSites) : undefined;
   const copy = (COPY[current.view] || COPY.overview)(wide, profile?.name || "Project", profile?.detail || "This project");
-  const listed = (current.roster.tenants || []).filter((tenant) => PROFILES[tenant.id]).length;
+  const liveWeb = view === "web" && current.umami
+    ? "Live web totals come directly from Umami for the selected period."
+    : "";
+  const description = publicMode
+    ? scope && [liveWeb, "To protect visitor privacy, the public dashboard shows only aggregate web totals for connected projects."].filter(Boolean).join(" ")
+    : liveWeb || copy[1];
+  const ids = scopeIds(current);
+  const listed = ids.length;
+  const overviewSource = view === "overview" && webMetricSource(current, ids) === "Live + Sample";
+  const showApiSource = !publicMode && !showReportStatus && Boolean(current.apiMetrics)
+    && (view === "overview" || view === "compare" || view === "manage");
   const showRange = RANGE_VIEWS.has(current.view);
   const showRoadmap = current.view === "roadmap";
   const workspaceLabel = publicMode ? "Public · Ecosystem" : operator ? "SCF · All projects" : profile?.name || "Project";
   const workspaceMark = publicMode ? "P" : operator ? "S" : profile?.name?.[0] || "P";
 
   function exportData() {
-    if (isPublic(current)) return;
+    if (isPublic(current) || showReportStatus) return;
 
-    const projectIds = scopeIds(current).filter((id) => {
-      if (!PROFILES[id]) return false;
-      return current.view !== "api" || current.project === "all" || id === current.project;
-    });
+    const projectIds = scopeIds(current).filter((id) =>
+      current.view !== "api" || current.project === "all" || id === current.project,
+    );
     if (projectIds.length === 0) return;
 
     const payload = {
@@ -283,7 +339,6 @@ export function Console() {
     current.enrollStep = "details";
     current.enrollId = "";
     current.enrollName = "";
-    current.enrollProof = "stellar.toml";
     current.enrollToken = "";
     current.enrollResult = "";
     bump();
@@ -293,13 +348,6 @@ export function Console() {
     current.enrollOpen = false;
     bump();
   }
-
-  const proofLabel =
-    current.enrollProof === "stellar.toml"
-      ? "stellar.toml"
-      : current.enrollProof === "contract"
-        ? "Soroban contract"
-        : "SCF project link";
 
   async function enroll(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -337,7 +385,7 @@ export function Console() {
           id,
           name: label,
           detail: "Just enrolled",
-          proof: proofLabel,
+          umamiStatus: "Tracking setup pending",
           status: current.approval ? "pending" : "hidden",
         });
       }
@@ -368,7 +416,7 @@ export function Console() {
           <p className="kicker">Workspace</p>
           <div className="workspace-menu">
             <button type="button" aria-haspopup="listbox" aria-expanded={current.menuOpen} onClick={() => { current.menuOpen = !current.menuOpen; bump(); }}>
-              <span className="avatar">{workspaceMark}</span>
+              {current.mode === "tenant" && current.tenantId ? <ProjectIcon id={current.tenantId} /> : <span className="avatar">{workspaceMark}</span>}
               <span>{workspaceLabel}</span>
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
                 <path d="M3 5.2 7 9l4-3.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
@@ -383,10 +431,10 @@ export function Console() {
                 <span className="avatar">S</span>
                 <span>SCF · All projects</span>
               </button>
-              {current.roster.tenants.map((tenant) => (
+              {current.roster.tenants.filter((tenant) => availableProject(current, tenant.id)).map((tenant) => (
                 <button key={tenant.id} type="button" aria-pressed={current.role === tenant.id} onClick={() => enterTenant(tenant.id)}>
-                  <span className="avatar">{(PROFILES[tenant.id]?.name || tenant.id)[0]}</span>
-                  <span>{PROFILES[tenant.id]?.name || tenant.id}</span>
+                  <ProjectIcon id={tenant.id} />
+                  <span>{nameOf(tenant.id, current.umamiSites)}</span>
                 </button>
               ))}
               <button type="button" onClick={openTenantPicker}>
@@ -409,10 +457,14 @@ export function Console() {
           </a>
           <p className="nav-group">Analytics</p>
           <NavButton current={current} id="web" bump={bump} icon={<IconWeb />}>Web</NavButton>
-          <NavButton current={current} id="api" bump={bump} icon={<IconApi />}>API</NavButton>
+          {!publicMode ? <NavButton current={current} id="api" bump={bump} icon={<IconApi />}>API</NavButton> : null}
           <NavButton current={current} id="compare" bump={bump} icon={<IconProjects />} extra={<span className="count">{listed}</span>}>Projects</NavButton>
-          <p className="nav-group">Setup</p>
-          <NavButton current={current} id="integration" bump={bump} icon={<IconCode />}>Integration</NavButton>
+          {!publicMode ? (
+            <>
+              <p className="nav-group">Setup</p>
+              <NavButton current={current} id="integration" bump={bump} icon={<IconCode />}>Integration</NavButton>
+            </>
+          ) : null}
           {!publicMode ? <p className="nav-group">Ops</p> : null}
           {operator ? <NavButton current={current} id="manage" bump={bump} icon={<IconManage />}>SCF managing</NavButton> : null}
           {!publicMode ? <NavButton current={current} id="privacy" bump={bump} icon={<IconPrivacy />}>Data & privacy</NavButton> : null}
@@ -427,11 +479,11 @@ export function Console() {
           <header className="top">
             <div>
               <h1>{copy[0]}</h1>
-              <p className="lede">{copy[1]}</p>
+              {description ? <p className="lede">{description}</p> : null}
             </div>
             {!showRoadmap && !publicMode && (
               <div className="top-tools">
-                <button className="ghost" type="button" onClick={exportData}>
+                <button className="ghost" type="button" onClick={exportData} disabled={showReportStatus}>
                   {current.mode === "tenant" ? "Export data from your project" : "Export data"}
                 </button>
                 <button className="primary" type="button" onClick={openEnroll}>
@@ -443,20 +495,29 @@ export function Console() {
           {!showRoadmap && (
             <div className="context-strip">
               <div className="context-tools">
-                <span className={"status-pill" + (current.umami ? " live" : "")}>
-                  {current.umami ? "Live web · sample API" : "Sample data"}
-                </span>
+                {view === "api" ? (
+                  <span className="status-pill sample">Sample API</span>
+                ) : (
+                  <span className={"status-pill" + (current.umami && !overviewSource ? " live" : "")}>
+                    {showReportStatus
+                      ? "Loading Umami"
+                      : fallbackMessage ? "Sample web data"
+                      : overviewSource ? "Live and sample web data"
+                      : current.umami ? "Live web" : "Sample data"}
+                  </span>
+                )}
+                {showApiSource ? <span className="status-pill sample">Sample API</span> : null}
                 {showRange ? (
                   <div className="range-wrap">
-                    <span className="window">{windowLabel(current)}</span>
+                    <span className="window">{showReportStatus ? RANGE_LABELS[current.range] : windowLabel(current)}</span>
                     <label className="range">
                       <span className="sr">Time range</span>
                       <select
                         aria-label="Time range"
                         value={current.range}
-                        onChange={async (event) => {
+                        onChange={(event) => {
                           current.range = event.target.value as RangeKey;
-                          await loadUmami(current.range);
+                          current.detail = null;
                           bump();
                         }}
                       >
@@ -470,11 +531,24 @@ export function Console() {
               </div>
             </div>
           )}
+          {fallbackMessage ? <p className="caption" role="status">{fallbackMessage}{ids.length && view !== "manage" ? " Showing sample web metrics." : ""}</p> : null}
           <div className={showRoadmap ? "enter roadmap-content" : "enter"}>
             {showRoadmap ? (
               <Roadmap />
+            ) : showReportStatus ? (
+              <section className="panel" role="status" aria-busy="true">
+                <p className="quiet">Loading Umami metrics…</p>
+              </section>
+            ) : view === "api" && !current.apiMetrics ? (
+              <section className="panel" role="status">
+                <p className="quiet">{activeTraffic?.error ?? "Loading sample API metrics…"}</p>
+              </section>
+            ) : view === "api" && current.apiMetrics && !Object.keys(current.apiMetrics).length ? (
+              <section className="panel" role="status">
+                <p className="quiet">No simulated API metrics are available for this project.</p>
+              </section>
             ) : (
-              <Stage state={current} bump={bump} onOpen={(id) => enterTenant(id)} />
+              <Stage state={current} bump={bump} onOpen={enterTenant} />
             )}
           </div>
         </div>
@@ -496,7 +570,7 @@ export function Console() {
                   <input
                     value={current.enrollName}
                     autoComplete="off"
-                    placeholder="Northwind"
+                    placeholder="Example project"
                     onChange={(event) => {
                       current.enrollName = event.target.value;
                       bump();
@@ -508,7 +582,7 @@ export function Console() {
                   <input
                     value={current.enrollId}
                     autoComplete="off"
-                    placeholder="northwind"
+                    placeholder="example-project"
                     onChange={(event) => {
                       current.enrollId = event.target.value;
                       bump();
@@ -516,30 +590,8 @@ export function Console() {
                   />
                 </label>
                 <p className="field-hint">Used in the script tag and API tenant id. Letters, numbers, hyphens.</p>
-                <p className="field-label">Stellar proof</p>
-                <div className="proof-picks" role="radiogroup" aria-label="Stellar proof">
-                  {(
-                    [
-                      ["stellar.toml", "stellar.toml", "Hosted domain proof"],
-                      ["contract", "Soroban contract", "Contract id on network"],
-                      ["scf", "SCF project", "Community Fund listing"],
-                    ] as const
-                  ).map(([value, title, note]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className="ghost"
-                      aria-pressed={current.enrollProof === value}
-                      onClick={() => {
-                        current.enrollProof = value;
-                        bump();
-                      }}
-                    >
-                      <strong>{title}</strong>
-                      <small>{note}</small>
-                    </button>
-                  ))}
-                </div>
+                <p className="field-label">Umami setup</p>
+                <p className="field-hint">Add the Umami tracking script to the project website to complete the setup.</p>
                 <div className="modal-actions">
                   <button className="ghost" type="button" onClick={closeEnroll}>Cancel</button>
                   <button className="primary" type="submit">Continue</button>
@@ -553,7 +605,7 @@ export function Console() {
                 <dl className="enroll-summary">
                   <div><dt>Name</dt><dd>{current.enrollName.trim() || current.enrollId}</dd></div>
                   <div><dt>Project id</dt><dd className="mono">{current.enrollId}</dd></div>
-                  <div><dt>Proof</dt><dd>{proofLabel}</dd></div>
+                  <div><dt>Setup</dt><dd>Install the Umami tracking script</dd></div>
                   <div><dt>Dashboard</dt><dd>Hidden until SCF lists it</dd></div>
                 </dl>
                 <div className="modal-actions">
@@ -605,13 +657,13 @@ export function Console() {
             <p className="lede">Switch into one project workspace. Other tenants stay hidden.</p>
             <div className="tenant-pick">
               {(current.roster.tenants || [])
-                .filter((tenant) => PROFILES[tenant.id])
+                .filter((tenant) => availableProject(current, tenant.id))
                 .map((tenant) => (
                   <button key={tenant.id} type="button" aria-pressed={current.role === tenant.id} onClick={() => enterTenant(tenant.id)}>
-                    <span className={"avatar " + (PROFILES[tenant.id]?.hue || "lavender")}>{(PROFILES[tenant.id]?.name || tenant.id)[0]}</span>
+                    <ProjectIcon id={tenant.id} />
                     <span>
-                      <strong>{PROFILES[tenant.id]?.name || tenant.id}</strong>
-                      <span>{PROFILES[tenant.id]?.detail || "Project workspace"}</span>
+                      <strong>{nameOf(tenant.id, current.umamiSites)}</strong>
+                      <span>{profileOf(tenant.id, current.umamiSites).domain || profileOf(tenant.id).detail}</span>
                     </span>
                   </button>
                 ))}

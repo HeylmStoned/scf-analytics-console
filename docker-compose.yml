@@ -13,10 +13,10 @@ services:
       NODE_ENV: production
       PORT: "8080"
       HOSTNAME: "0.0.0.0"
-      # Optional live web metrics (leave unset to use fixtures):
+      # Optional server-side Umami settings for automatic website discovery.
+      # UMAMI_API_KEY: ${UMAMI_API_KEY:-}
+      # UMAMI_API_CLIENT_ENDPOINT: https://api.umami.is/v1
       # UMAMI_URL: https://your-umami.example
       # UMAMI_USER: admin
-      # UMAMI_PASSWORD: change-me
-      # UMAMI_ALPHA: website-id
-      # UMAMI_BETA: website-id
+      # UMAMI_PASSWORD: ${UMAMI_PASSWORD:-}
     restart: unless-stopped

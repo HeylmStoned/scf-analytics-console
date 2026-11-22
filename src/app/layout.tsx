@@ -17,11 +17,23 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const trackerWebsiteId = process.env.UMAMI_TRACKER_WEBSITE_ID?.trim();
+  const trackerDomains = process.env.UMAMI_TRACKER_DOMAINS?.trim();
+
   return (
     <html lang="en" className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
       <head>
         {/* The console already has a dark theme. Keep Dark Reader from rewriting it before hydration. */}
         <meta name="darkreader-lock" />
+        {trackerWebsiteId && trackerDomains && (
+          <script
+            defer
+            src="https://cloud.umami.is/script.js"
+            data-performance="true"
+            data-website-id={trackerWebsiteId}
+            data-domains={trackerDomains}
+          />
+        )}
       </head>
       <body>{children}</body>
     </html>

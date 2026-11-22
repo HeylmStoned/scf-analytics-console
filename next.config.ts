@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
     return [{ source: "/scf", destination: "/", permanent: false }];
   },
   async rewrites() {
-    return ["/demo/roster", "/s/e", "/v1/traces", "/tenants", "/metrics/api", "/metrics/web"].map((path) => ({
+    return ["/demo/roster", "/s/e", "/v1/traces", "/tenants", "/metrics/web"].map((path) => ({
       source: path,
       destination: worker + path,
     }));
