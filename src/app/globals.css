@@ -534,6 +534,7 @@ tr:hover td { background: rgba(243, 239, 230, 0.02); }
 .gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .gate form, .gate-panel { width: min(420px, 100%); padding: 22px; }
 .gate-panel { width: min(560px, 100%); }
+.gate-home { width: min(640px, 100%); }
 .gate h1 { font-size: 32px; }
 .gate-intro { display: grid; gap: 10px; }
 .gate-intro p { color: var(--muted); margin: 0; }

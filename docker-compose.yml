@@ -1,0 +1,22 @@
+# Local rebuild of the reviewer console POC.
+# Production Pulse stack (Umami + OTLP collector + Redis + Postgres) will replace
+# this file in the full monorepo; Redis is the chosen ingest buffer there too.
+
+services:
+  console:
+    build:
+      context: .
+      dockerfile: Dockerfile.poc
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      HOSTNAME: "0.0.0.0"
+      # Optional server-side Umami settings for automatic website discovery.
+      # UMAMI_API_KEY: ${UMAMI_API_KEY:-}
+      # UMAMI_API_CLIENT_ENDPOINT: https://api.umami.is/v1
+      # UMAMI_URL: https://your-umami.example
+      # UMAMI_USER: admin
+      # UMAMI_PASSWORD: ${UMAMI_PASSWORD:-}
+    restart: unless-stopped

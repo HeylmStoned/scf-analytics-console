@@ -9,6 +9,7 @@
 - Added the SCF project rollout chart and an Umami status column in SCF managing. Project tables display website names and domains from Umami.
 - Added the official Prismfi.cc and Lend.xyz favicons to Overview, project tables, and the workspace selector. The console serves them locally and uses contrasting tiles for the dark theme.
 - Added the Roadmap after Overview, with delivery tranches at weeks 8, 12, and 16. Each tranche lists deliverables and completion criteria. The navigation also links directly to the project GitBook.
+- Documented the production availability commitments and added an MIT license and Docker Compose launch.
 - Added Dark Reader compatibility metadata for the console's built-in dark theme.
 
 ### Analytics and privacy

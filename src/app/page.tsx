@@ -14,18 +14,25 @@ export default async function Page() {
         <header className="gate-intro">
           <h1>Stellar ecosystem analytics</h1>
           <p className="lede">
-            This proof of concept shows how the Stellar Community Fund and project teams can
-            explore and compare web and API usage across the Stellar ecosystem.
+            Reviewer console for a proposed shared, free web and API analytics service for
+            Stellar projects.
           </p>
           <p>
-            Live web totals come from Umami. The Public, SCF, and Tenant demo views are open to reviewers.
-            Reviewer roles, operator controls, and data erasure demonstrate proposed workflows.
+            <strong>Available in the demo.</strong> Public, SCF, and Tenant dashboards, the roadmap,
+            and live web metrics from Umami.
           </p>
           <p>
             Stellar projects appear in the analytics dashboards once Umami records their first pageview.
           </p>
-          <p>{API_METRICS_NOTICE}</p>
-          <a href="https://scf.gitbook.io/scf-docs-1">Read the project GitBook</a>
+          <p>
+            <strong>Simulated in the demo.</strong> {API_METRICS_NOTICE} Enrollment, keys, and data
+            erasure demonstrate the proposed workflows.
+          </p>
+          <p>
+            <a href="https://scf.gitbook.io/scf-docs-1">Read the project GitBook</a>
+            {" · "}
+            <a href="https://github.com/HeylmStoned/scf-analytics-console">Console repository</a>
+          </p>
         </header>
       }
     />

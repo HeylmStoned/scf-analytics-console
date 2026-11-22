@@ -190,7 +190,7 @@ export function Console({ introduction, umamiSites }: {
   if (booting) {
     return (
       <main className="gate">
-        <div className="panel gate-panel">
+        <div className="panel gate-panel gate-home">
           {introduction}
           <noscript><p className="caption">Enable JavaScript to open the interactive dashboards.</p></noscript>
         </div>
@@ -257,7 +257,7 @@ export function Console({ introduction, umamiSites }: {
     }
     return (
       <div className="gate">
-        <div className="panel gate-panel">
+        <div className="panel gate-panel gate-home">
           {introduction}
           <h2>Choose a view</h2>
           <p className="lede">Three demo modes for reviewers. You can switch anytime from the workspace menu.</p>
