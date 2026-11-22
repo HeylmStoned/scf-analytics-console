@@ -145,7 +145,7 @@ export function Donut({
   onPick,
   colors,
 }: {
-  rows: { name: string; count: number; detail?: string }[];
+  rows: { id?: string; name: string; count: number; detail?: string }[];
   label?: string;
   large?: boolean;
   active?: string;
@@ -163,12 +163,12 @@ export function Donut({
   const center = size / 2;
   const circ = 2 * Math.PI * radius;
   let offset = 0;
-  const current = drawn.find((row) => row.name === hover);
+  const current = drawn.find((row) => (row.id ?? row.name) === hover);
   return (
     <div className="pie-wrap" onMouseLeave={() => setHover(null)}>
       <svg className={"donut" + (large ? " large" : "")} viewBox={"0 0 " + size + " " + size} role="img" aria-label={label}>
         {drawn.length === 1 ? (
-          <circle cx={center} cy={center} r={radius} fill="none" stroke={palette[0]} strokeWidth={width} onMouseMove={() => setHover(drawn[0].name)} />
+          <circle cx={center} cy={center} r={radius} fill="none" stroke={palette[0]} strokeWidth={width} onMouseMove={() => setHover(drawn[0].id ?? drawn[0].name)} />
         ) : (
           drawn.map((row, index) => {
             const len = (row.count / total) * circ;
@@ -177,7 +177,7 @@ export function Donut({
             const dash = visible.toFixed(2) + " " + (circ - visible).toFixed(2);
             const node = (
               <circle
-                key={row.name}
+                key={row.id ?? row.name}
                 className={onPick ? "slice interactive" : "slice"}
                 cx={center}
                 cy={center}
@@ -188,7 +188,7 @@ export function Donut({
                 strokeDasharray={dash}
                 strokeDashoffset={-offset}
                 transform={"rotate(-90 " + center + " " + center + ")"}
-                onMouseMove={() => setHover(row.name)}
+                onMouseMove={() => setHover(row.id ?? row.name)}
                 onClick={() => onPick?.(row.name)}
               />
             );

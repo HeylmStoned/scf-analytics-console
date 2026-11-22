@@ -1,18 +1,15 @@
 import { Console } from "@/components/Console";
 import { API_METRICS_NOTICE } from "@/lib/model";
-import { publicUmamiProjects } from "@/lib/umami";
+import { activeUmamiProjects } from "@/lib/umami";
 
 export const dynamic = "force-dynamic";
 
-export default function Page() {
-  const publicProjects = publicUmamiProjects(process.env.UMAMI_PUBLIC_PROJECTS);
-  const betaConfigured = Boolean(process.env.UMAMI_BETA?.trim());
-  const prismLive = betaConfigured && publicProjects.includes("beta");
+export default async function Page() {
+  const umamiSites = await activeUmamiProjects(process.env).catch(() => null);
 
   return (
     <Console
-      publicProjects={publicProjects}
-      betaConfigured={betaConfigured}
+      umamiSites={umamiSites}
       introduction={
         <header className="gate-intro">
           <h1>Stellar ecosystem analytics</h1>
@@ -25,9 +22,7 @@ export default function Page() {
             Reviewer roles, operator controls, and data erasure demonstrate proposed workflows.
           </p>
           <p>
-            {prismLive
-              ? "Review Prismfi.cc alongside the demo site. More Stellar projects will be added as their analytics are connected."
-              : "Stellar projects such as Prismfi.cc will be added as their analytics are connected."}
+            Stellar projects appear in the analytics dashboards once Umami records their first pageview.
           </p>
           <p>{API_METRICS_NOTICE}</p>
           <a href="https://scf.gitbook.io/scf-docs-1">Read the project GitBook</a>

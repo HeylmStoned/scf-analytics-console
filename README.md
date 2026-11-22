@@ -14,21 +14,23 @@ The welcome page explains the demo and links to the project GitBook in its initi
 
 | Perspective | What to review |
 | --- | --- |
-| **Public** | View aggregate web totals for the selected period and compare publicly listed sites. |
-| **SCF** | See available and planned projects in **Projects**, compare their analytics, and preview listing, enrollment, and erasure in **SCF managing** and **Data & privacy**. **Export data** downloads aggregate JSON. Selecting a project in **API** limits the export to that project. |
+| **Public** | Compare aggregate web totals for listed projects with recorded traffic. |
+| **SCF** | Compare active sites in **Projects** and review onboarding and listing in **SCF managing**. **Data & privacy** demonstrates erasure. **Export data** downloads JSON, scoped to the selected project when a project filter is applied in **API**. |
 | **Tenant** | Review the selected project's web and sample API metrics. **Export data from your project** exports only that project's analytics. |
 
-**SCF → Projects** shows the demo site, Prismfi.cc when configured, and Lend.xyz awaiting its Umami website ID. New Stellar projects will appear as their analytics are connected.
+Projects appear in analytics, comparisons, and the Tenant selector after Umami records their first pageview. Once eligible, a site stays visible even when the selected reporting period has zero pageviews. Project tables display the names and domains registered in Umami.
 
-**SCF managing** records Umami script installation as the proof of setup. Overview, project tables, and the workspace selector use locally served copies of the official favicons. [Prismfi.cc favicon](https://prismfi.cc/favicon.ico) · [Lend.xyz favicon](https://lend.xyz/favicon.ico)
+Open **SCF → SCF managing → Projects** to see sites waiting for traffic. The **Umami status** column shows whether pageviews were recorded in the selected period. Check the website itself to verify script installation.
+
+Project icons use locally served copies of the Prismfi.cc and Lend.xyz favicons. [Prismfi.cc favicon](https://prismfi.cc/favicon.ico) · [Lend.xyz favicon](https://lend.xyz/favicon.ico)
 
 **Roadmap** follows **Overview** in the navigation. Its interactive timeline covers weeks 8, 12, and 16, with deliverables and completion criteria for each tranche. The proposal targets production in **week 16** and includes **12 months of hosting and support** after the final tranche is approved.
 
 ## Data sources and privacy
 
-- **Live web** comes from Umami. **Overview** shows aggregate visitor and pageview totals in Public and a time series when available in SCF and Tenant. In **Web**, switch between Top pages, Countries, Referrers, Devices, Browsers, and Operating systems using one table. The Countries tab includes a zoomable map you can drag.
-- **Sample API** uses deterministic fixtures for request counts, HTTP statuses, normalized routes, and latency. Live API metrics are planned for implementation of the OpenTelemetry Protocol (OTLP) collector.
-- The server retrieves **country-level aggregates** as its only geographic dimension. The Public perspective shows aggregate web totals. SCF and Tenant are open demo perspectives. Tenant views and exports use the selected project's scope.
+- **Live web** comes from Umami. The Public **Web activity** chart shows totals for the selected period. SCF and Tenant can view a time series when available and switch between Top pages, Countries, Referrers, Devices, Browsers, and Operating systems in **Web**. The Countries tab includes a zoomable map you can drag.
+- **Sample API** uses deterministic fixtures for request counts, HTTP statuses, normalized routes, and latency. The **Projects → Routes** table labels its API data as simulated. The planned OpenTelemetry Protocol (OTLP) collector will provide live API metrics when implemented.
+- Public receives only aggregate web totals. Geographic reporting in SCF and Tenant is limited to country-level aggregates. Tenant views and exports use the selected project's scope. These perspectives are open to reviewers for the POC.
 - Reports show a loading state before Umami responds. When a report is unavailable, the console clearly labels any sample figures it displays. Overview distinguishes live, sample, and mixed figures.
 
 The POC demonstrates free enrollment, listing controls, metrics keys, and data erasure workflows. Listing changes, generated metrics keys, and erasure actions use browser session state and reset on reload.
@@ -52,14 +54,26 @@ Copy [`.env.example`](.env.example) to `.env.local` and fill in the settings for
 | --- | --- |
 | `UMAMI_API_KEY` | Server-side [Umami Cloud API key](https://docs.umami.is/docs/cloud/api-key) |
 | `UMAMI_API_CLIENT_ENDPOINT` | API endpoint for key-based authentication. Defaults to `https://api.umami.is/v1`. |
-| `UMAMI_ALPHA` | Umami website ID for scf-umami-poc-production.up.railway.app |
-| `UMAMI_BETA` | Umami website ID for Prismfi.cc |
-| `UMAMI_PUBLIC_PROJECTS` | Comma-separated project IDs approved for live Umami reporting in the POC. Defaults to `alpha`. Set it to an empty value to disable live reporting. |
 | `UMAMI_URL` | Base URL for self-hosted username/password authentication |
 | `UMAMI_USER` | Self-hosted account name. Defaults to `admin`. |
 | `UMAMI_PASSWORD` | Self-hosted account password |
 
-Set `UMAMI_ALPHA` for the demo site and `UMAMI_BETA` for Prismfi.cc. Set `UMAMI_PUBLIC_PROJECTS=alpha,beta` to enable live analytics for both projects in the POC. Public shows their web totals, while SCF and Tenant can open the country-level and other web breakdowns. Restart the dev server after changing the configuration.
+The server discovers Umami properties through `GET /websites` with the configured credentials. Project website IDs and the Public project list are resolved automatically. Use credentials scoped to websites intended for this demo.
+
+The site directory and first-pageview checks are cached for one minute. Reload the page after that interval to pick up new properties or newly recorded first visits. Restart the development server after changing environment variables.
+
+### Browser tracking by deployment
+
+To record visits to the console itself, configure both variables on the Railway service for the target environment.
+
+| Variable | Purpose |
+| --- | --- |
+| `UMAMI_TRACKER_WEBSITE_ID` | Public website ID from the Umami property for this deployment |
+| `UMAMI_TRACKER_DOMAINS` | Comma-separated list of allowed hostnames, without schemes or paths |
+
+The console loads the Umami tracker only when both values are present. Give each production domain its own Umami property to keep its traffic separate. Leave the tracker variables empty on pull request previews to disable collection there. Redeploy after changing the service variables.
+
+Grant the server-side Umami credentials access to the deployment’s website property for its traffic to appear in the dashboard.
 
 ## Code map
 
@@ -70,6 +84,7 @@ Set `UMAMI_ALPHA` for the demo site and `UMAMI_BETA` for Prismfi.cc. Set `UMAMI_
 | [`src/components/CountryMap.tsx`](src/components/CountryMap.tsx) | Country map, zoom, and pan controls |
 | [`src/components/Roadmap.tsx`](src/components/Roadmap.tsx) | Delivery timeline, tranches, and acceptance criteria |
 | [`src/lib/model.ts`](src/lib/model.ts) | Demo projects, metric fixtures, and scope calculations |
+| [`src/lib/umami.ts`](src/lib/umami.ts) | Umami property discovery, first-pageview checks, and metric queries |
 | [`src/app/api/umami/route.ts`](src/app/api/umami/route.ts) | Server-side endpoint for Umami dashboard metrics |
 | [`src/app/metrics/api/route.ts`](src/app/metrics/api/route.ts) | Sample API metrics for the selected demo perspective |
 | [`next.config.ts`](next.config.ts) | Rewrites that connect the console to the hosted demo worker |

@@ -11,9 +11,10 @@ import {
   PIE,
   PRIOR,
   PROFILES,
+  UMAMI_PROJECT_DOMAINS,
+  profileOf,
   RANGE_LABELS,
   WEB_VITALS,
-  availableProject,
   liveSites,
   SNIPPET,
   addSeries,
@@ -168,7 +169,7 @@ function Freshness({ state }: { state: AppState }) {
       {showSource ? <span className={source === "Live" ? "live" : ""}>{source === "Live"
         ? "Web · Umami synced" : source === "Sample" ? "Web · sample" : "Web · live and sample"}</span> : null}
       {state.view === "overview" && !isPublic(state) && state.apiMetrics ? <span>API · collector sample</span> : null}
-      {alternateProjects.map((id) => <span key={id}>{nameOf(id)} · Umami data from a different domain</span>)}
+      {alternateProjects.map((id) => <span key={id}>{nameOf(id, state.umamiSites)} · Umami data from a different domain</span>)}
     </p>
   );
 }
@@ -286,7 +287,7 @@ function ApiCurve({ state, ids, bump }: { state: AppState; ids: string[]; bump: 
   const series: ChartSeries[] =
     ids.length === 1
       ? [{ name: "API requests", values: stats(state, ids[0]).seriesRequests, color: "#d4c4ff" }]
-      : ids.map((id) => ({ name: nameOf(id), values: stats(state, id).seriesRequests, color: id === "alpha" ? "#d4c4ff" : "#f0a090" }));
+      : ids.map((id) => ({ name: nameOf(id, state.umamiSites), values: stats(state, id).seriesRequests, color: id === "alpha" ? "#d4c4ff" : "#f0a090" }));
   return (
     <section className="panel" style={{ marginTop: 12 }}>
       <div className="panel-head">
@@ -306,8 +307,8 @@ function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: stri
   const showApi = privateMode && Boolean(state.apiMetrics);
   const sort = showApi ? state.projectSort : state.projectSort === "name" ? "name" : "visitors";
   const query = state.projectQuery.trim().toLowerCase();
-  let rows = ids.map((id) => ({ id, meta: PROFILES[id], data: stats(state, id) })).filter((row) => row.meta);
-  if (query) rows = rows.filter((row) => (row.meta.name + " " + row.meta.detail).toLowerCase().includes(query));
+  let rows = ids.map((id) => ({ id, meta: profileOf(id, state.umamiSites), data: stats(state, id) }));
+  if (query) rows = rows.filter((row) => (row.meta.name + " " + (row.meta.domain || row.meta.detail)).toLowerCase().includes(query));
   rows.sort((a, b) => {
     if (sort === "visitors") return b.data.visitors - a.data.visitors;
     if (sort === "errors") return b.data.errorRate - a.data.errorRate;
@@ -375,10 +376,10 @@ function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: stri
                 <tr key={row.id}>
                   <td>
                     <span className="who">
-                      <ProjectIcon id={row.id} />
+                      <ProjectIcon id={row.id} name={row.meta.name} />
                       <span>
                         <strong>{row.meta.name}</strong>
-                        <span className="quiet">{row.meta.detail}</span>
+                        <span className="quiet">{row.meta.domain || row.meta.detail}</span>
                       </span>
                     </span>
                   </td>
@@ -394,9 +395,11 @@ function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: stri
                   ) : null}
                   {privateMode ? (
                     <td>
-                      <button className="ghost" type="button" onClick={() => onOpen(row.id)}>
-                        Open as tenant
-                      </button>
+                      {state.roster?.tenants.some((tenant) => tenant.id === row.id) ? (
+                        <button className="ghost" type="button" onClick={() => onOpen(row.id)}>
+                          Open as tenant
+                        </button>
+                      ) : null}
                     </td>
                   ) : null}
                 </tr>
@@ -414,12 +417,8 @@ function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: stri
 }
 
 function ProjectRollout({ state, ids }: { state: AppState; ids: string[] }) {
-  if (state.role !== "operator") return null;
-  const projects = [
-    ...ids.map((id) => ({ name: nameOf(id), status: "Available" })),
-    ...(!state.betaConfigured ? [{ name: nameOf("beta"), status: "Awaiting Umami ID" }] : []),
-    { name: "Lend.xyz", status: "Awaiting Umami ID" },
-  ];
+  if (state.role !== "operator" || !ids.length) return null;
+  const projects = ids.map((id) => ({ id, name: nameOf(id, state.umamiSites) }));
   return (
     <section className="panel project-rollout">
       <div className="panel-head">
@@ -429,12 +428,12 @@ function ProjectRollout({ state, ids }: { state: AppState; ids: string[] }) {
         </div>
       </div>
       <div className="project-rollout-body">
-        <Donut rows={projects.map(({ name, status }) => ({ name, count: 1, detail: status }))} colors={PIE} label="Available and planned projects" large />
-        <ul aria-label="Project onboarding status">
-          {projects.map(({ name, status }, index) => (
-            <li key={name}>
+        <Donut rows={projects.map(({ id, name }) => ({ id, name, count: 1 }))} colors={PIE} label="Projects with recorded pageviews" large />
+        <ul aria-label="Projects with recorded pageviews">
+          {projects.map(({ id, name }, index) => (
+            <li key={id}>
               <i className="swatch" style={{ background: PIE[index % PIE.length] }} aria-hidden="true" />
-              <span><strong>{name}</strong><small className="quiet">{status}</small></span>
+              <span><strong>{name}</strong></span>
             </li>
           ))}
         </ul>
@@ -533,11 +532,11 @@ function WebBreakdownTable({ state, ids, bump }: { state: AppState; ids: string[
             {pages ? pageRows.map((row) => (
               <tr key={row.tenantId + row.path}>
                 <td><button className="report-link mono" type="button" onClick={() => {
-                  filterSample(ids.length > 1 ? nameOf(row.tenantId) + " · " + row.path : row.path);
+                  filterSample(ids.length > 1 ? nameOf(row.tenantId, state.umamiSites) + " · " + row.path : row.path);
                   state.detail = { kind: "path", tenantId: row.tenantId, path: row.path, sample: !available };
                   bump();
                 }}>{row.path}</button></td>
-                {showProject ? <td><span className="who"><ProjectIcon id={row.tenantId} compact />{nameOf(row.tenantId)}</span></td> : null}
+                {showProject ? <td><span className="who"><ProjectIcon id={row.tenantId} compact />{nameOf(row.tenantId, state.umamiSites)}</span></td> : null}
                 <td className="num">{num(row.views)}</td>
                 <td className="num">{row.visitors == null ? "—" : num(row.visitors)}</td>
                 <td className="num">{row.visits == null ? "—" : num(row.visits)}</td>
@@ -587,7 +586,7 @@ function WebPerformance({ state, ids }: { state: AppState; ids: string[] }) {
             <tbody>
               {rows.map(({ id, label, metric, value }) => (
                 <tr key={id + metric}>
-                  {ids.length > 1 ? <td>{nameOf(id)}</td> : null}
+                  {ids.length > 1 ? <td>{nameOf(id, state.umamiSites)}</td> : null}
                   <th scope="row">{label} ({metric.toUpperCase()})</th>
                   {[value.p50, value.p75, value.p95].map((measurement, index) => (
                     <td className="num" key={index}>{metric === "cls" ? measurement.toFixed(3) : ms(measurement)}</td>
@@ -641,7 +640,7 @@ function ApiFilterChip({ state, bump, projects }: { state: AppState; bump: () =>
         {projects && state.project !== "all" ? (
           <>
             {" "}
-            · <strong>{nameOf(state.project)}</strong>
+            · <strong>{nameOf(state.project, state.umamiSites)}</strong>
           </>
         ) : null}
       </span>
@@ -738,7 +737,7 @@ function Filters({ state, ids, projects, bump }: { state: AppState; ids: string[
       {projects
         ? ["all", ...ids].map((value) => (
             <button key={value} type="button" aria-pressed={state.project === value} onClick={() => { state.project = value; bump(); }}>
-              {value === "all" ? "All projects" : nameOf(value)}
+              {value === "all" ? "All projects" : nameOf(value, state.umamiSites)}
             </button>
           ))
         : null}
@@ -795,7 +794,7 @@ function ApiTable({ state, rows, showProject, bump }: { state: AppState; rows: R
                   <td>
                     <span className="who">
                       <ProjectIcon id={row.tenantId} compact />
-                      {nameOf(row.tenantId)}
+                      {nameOf(row.tenantId, state.umamiSites)}
                     </span>
                   </td>
                 ) : null}
@@ -881,7 +880,7 @@ function PathDetail({
     return (
       <>
         <h2>Path not found</h2>
-        <p className="quiet">This path is unavailable for {nameOf(detail.tenantId)}.</p>
+        <p className="quiet">This path is unavailable for {nameOf(detail.tenantId, state.umamiSites)}.</p>
       </>
     );
   }
@@ -891,7 +890,7 @@ function PathDetail({
       <>
         <div className="panel-head">
           <div>
-            <p className="detail-kicker">{nameOf(detail.tenantId)} · path</p>
+            <p className="detail-kicker">{nameOf(detail.tenantId, state.umamiSites)} · path</p>
             <h2><code>{detail.path}</code></h2>
             <p>{windowLabel(state)}</p>
           </div>
@@ -928,12 +927,12 @@ function PathDetail({
     name: row.name,
     count: Math.max(1, Math.round(row.count * share)),
   }));
-  const filterLabel = scopeIds(state).length > 1 ? nameOf(detail.tenantId) + " · " + detail.path : detail.path;
+  const filterLabel = scopeIds(state).length > 1 ? nameOf(detail.tenantId, state.umamiSites) + " · " + detail.path : detail.path;
   return (
     <>
       <div className="panel-head">
         <div>
-          <p className="detail-kicker">{nameOf(detail.tenantId)} · path</p>
+          <p className="detail-kicker">{nameOf(detail.tenantId, state.umamiSites)} · path</p>
           <h2>
             <code>{detail.path}</code>
           </h2>
@@ -1039,7 +1038,7 @@ function ApiDetail({
     <>
       <div className="panel-head">
         <div>
-          <p className="detail-kicker">{nameOf(detail.tenantId)} · {detail.service}</p>
+          <p className="detail-kicker">{nameOf(detail.tenantId, state.umamiSites)} · {detail.service}</p>
           <h2>
             <code>{detail.route}</code>
           </h2>
@@ -1207,7 +1206,7 @@ function DayDetail({
                 <td>
                   <span className="who">
                     <ProjectIcon id={row.id} compact />
-                    {nameOf(row.id)}
+                    {nameOf(row.id, state.umamiSites)}
                   </span>
                 </td>
                 <td className="num">{num(row.visitors)}</td>
@@ -1403,7 +1402,7 @@ export function Stage({ state, bump, onOpen }: {
                     <span className="rank-fill bad" style={{ width: Math.max(8, Math.round((row.count / (failing[0].count || 1)) * 100)) + "%" }} aria-hidden="true" />
                     <span className="rank-label">
                       <strong>{row.route}</strong>
-                      <span className="quiet">{operator ? nameOf(row.tenantId) + " · " : ""}{row.service} · {row.status}</span>
+                      <span className="quiet">{operator ? nameOf(row.tenantId, state.umamiSites) + " · " : ""}{row.service} · {row.status}</span>
                     </span>
                     <span className="rank-nums">
                       <b>{num(row.count)}</b>
@@ -1439,7 +1438,7 @@ export function Stage({ state, bump, onOpen }: {
                   <span className="rank-fill warn" style={{ width: Math.max(8, Math.round(((row.p95 || 0) / (slowest[0].p95 || 1)) * 100)) + "%" }} aria-hidden="true" />
                   <span className="rank-label">
                     <strong>{row.route}</strong>
-                    <span className="quiet">{operator ? nameOf(row.tenantId) + " · " : ""}{row.service} · {row.status}</span>
+                    <span className="quiet">{operator ? nameOf(row.tenantId, state.umamiSites) + " · " : ""}{row.service} · {row.status}</span>
                   </span>
                   <span className="rank-nums">
                     <b>{ms(row.p95)}</b>
@@ -1478,7 +1477,7 @@ export function Stage({ state, bump, onOpen }: {
         <section className="panel" style={{ marginTop: 12 }}>
           <h2>Normalized endpoints</h2>
           <ApiFilterChip state={state} bump={bump} projects={operator} />
-          <Filters state={state} ids={operator ? (state.roster?.tenants || []).map((tenant) => tenant.id) : ids} projects={operator} bump={bump} />
+          <Filters state={state} ids={ids} projects={operator} bump={bump} />
           <ApiTable state={state} rows={visibleApi(state, ids)} showProject={operator} bump={bump} />
         </section>
         <TryPath />
@@ -1513,8 +1512,8 @@ export function Stage({ state, bump, onOpen }: {
               <thead>
                 <tr>
                   <th>Metric</th>
-                  <th><span className="who"><ProjectIcon id={left.id} compact />{nameOf(left.id)}</span></th>
-                  <th><span className="who"><ProjectIcon id={right.id} compact />{nameOf(right.id)}</span></th>
+                  <th><span className="who"><ProjectIcon id={left.id} compact />{nameOf(left.id, state.umamiSites)}</span></th>
+                  <th><span className="who"><ProjectIcon id={right.id} compact />{nameOf(right.id, state.umamiSites)}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1532,6 +1531,9 @@ export function Stage({ state, bump, onOpen }: {
         {showApi ? (
           <section className="panel" style={{ marginTop: 12 }}>
             <h2>Routes</h2>
+            <p className="sub">
+              Routes and API metrics are simulated in this POC. Live API metrics will come from the OpenTelemetry Protocol (OTLP) collector once implemented.
+            </p>
             <Filters state={state} ids={ids} projects bump={bump} />
             <ApiTable state={state} rows={visibleApi(state, ids)} showProject bump={bump} />
           </section>
@@ -1545,7 +1547,7 @@ export function Stage({ state, bump, onOpen }: {
         <ProjectRollout state={state} ids={ids} />
         {ids.map((id) => {
           const site = stats(state, id);
-          const meta = PROFILES[id];
+          const meta = profileOf(id, state.umamiSites);
           const cells: [string, string][] = [
             ["Pageviews", num(site.views)],
             ["Visitors", num(site.visitors)],
@@ -1561,7 +1563,7 @@ export function Stage({ state, bump, onOpen }: {
           return (
             <article key={id} className={"panel project " + meta.hue}>
               <div className="name">
-                <ProjectIcon id={id} compact />
+                <ProjectIcon id={id} name={meta.name} compact />
                 {meta.name}
               </div>
               <p className="quiet">{meta.detail}</p>
@@ -1599,28 +1601,36 @@ function TryPath() {
 }
 
 function Manage({ state, bump }: { state: AppState; bump: () => void }) {
-  const projectIds = new Set((state.roster?.tenants || []).map((tenant) => tenant.id));
-  if (!state.betaConfigured) projectIds.add("beta");
-  const known = [...projectIds].filter((id) => PROFILES[id]).map((id) => {
-    const missingUmamiId = !availableProject(state, id);
+  const directory = state.managedSites ?? state.umamiSites;
+  const projectIds = new Set([...Object.keys(UMAMI_PROJECT_DOMAINS), ...Object.keys(directory ?? {})]);
+  const known = [...projectIds].map((id) => {
+    const profile = profileOf(id, directory);
+    const registered = directory?.[id];
+    const metrics = state.umami?.[id];
+    const umamiStatus = !registered
+      ? state.managedSites ? "No matching site in Umami" : "Umami discovery unavailable"
+      : !metrics ? "Web metrics unavailable"
+      : metrics.views > 0 ? "Pageviews recorded"
+      : "No pageviews recorded";
     return {
       id,
-      name: PROFILES[id].name,
-      detail: PROFILES[id].detail,
-      proof: missingUmamiId ? "Umami script pending" : "Umami script added",
-      status: missingUmamiId ? "pending" : listingOf(state, id),
-      live: !missingUmamiId,
-      missingUmamiId,
+      name: profile.name,
+      detail: profile.domain || profile.detail,
+      umamiStatus,
+      status: registered ? listingOf(state, id) : "pending",
+      live: Boolean(metrics),
+      missingUmamiId: !registered,
     };
   });
-  const rows = known.concat(
-    state.waiting.map((item) => ({
+  const rows = [
+    ...known,
+    ...state.waiting.filter((item) => !projectIds.has(item.id)).map((item) => ({
       ...item,
       status: listingOf(state, item.id),
-      live: availableProject(state, item.id),
+      live: false,
       missingUmamiId: false,
     })),
-  );
+  ];
   const listed = rows.filter((row) => row.status === "listed").length;
   const pending = rows.filter((row) => row.status === "pending").length;
   const hidden = rows.filter((row) => row.status === "hidden").length;
@@ -1628,7 +1638,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
   const activeKeys = state.keys.filter((key) => !key.revoked).length;
   const query = state.projectQuery.trim().toLowerCase();
   const visible = query
-    ? rows.filter((row) => (row.name + " " + row.detail + " " + row.proof + " " + row.id).toLowerCase().includes(query))
+    ? rows.filter((row) => (row.name + " " + row.detail + " " + row.umamiStatus).toLowerCase().includes(query))
     : rows;
 
   function act(action: string, id = "") {
@@ -1642,7 +1652,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
       state.audit.unshift({
         at: new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC",
         actor: "SCF operator",
-        project: nameOf(id) || id,
+        project: nameOf(id, directory) || id,
         projectId: id,
         action: "Listed on dashboard",
         period: "—",
@@ -1658,7 +1668,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
       state.audit.unshift({
         at: new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC",
         actor: "SCF operator",
-        project: nameOf(id) || id,
+        project: nameOf(id, directory) || id,
         projectId: id,
         action: "Hidden from dashboard",
         period: "—",
@@ -1673,7 +1683,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
       state.audit.unshift({
         at: new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC",
         actor: "SCF operator",
-        project: nameOf(id) || id,
+        project: nameOf(id, directory) || id,
         projectId: id,
         action: "Removed from ecosystem",
         period: "—",
@@ -1696,7 +1706,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
       const tenantBound = state.keyScope === "tenant";
       state.keys.unshift({
         id: suffix,
-        name: tenantBound ? nameOf(state.keyTenant) + " reader" : "Ecosystem reader",
+        name: tenantBound ? nameOf(state.keyTenant, directory) + " reader" : "Ecosystem reader",
         hint: token,
         revoked: false,
         scope: state.keyScope,
@@ -1745,14 +1755,14 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
         <div className="panel-head">
           <div>
             <h2>Projects</h2>
-            <p>List publishes. Hide keeps enrollment. Remove is for projects that leave Stellar.</p>
+            <p>Umami web activity · {RANGE_LABELS[state.range]}. List publishes, hide keeps enrollment, and remove takes a project out of the dashboard.</p>
           </div>
           <span className="count">{visible.length}</span>
         </div>
         <div className="table-tools">
           <input
             type="search"
-            placeholder="Search projects, proof, or id…"
+            placeholder="Search projects, domains, or Umami status…"
             value={state.projectQuery}
             aria-label="Search managed projects"
             onChange={(event) => {
@@ -1766,7 +1776,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
             <thead>
               <tr>
                 <th>Project</th>
-                <th>Proof</th>
+                <th>Umami status</th>
                 <th>Visitors</th>
                 <th>Views</th>
                 <th>API</th>
@@ -1786,16 +1796,16 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
                           <ProjectIcon id={row.id} name={row.name} />
                           <span>
                             <strong>{row.name}</strong>
-                            <span className="quiet">{row.detail} · <span className="mono">{row.id}</span></span>
+                            <span className="quiet">{row.detail}</span>
                           </span>
                         </span>
                       </td>
-                      <td className="mono">{row.proof}</td>
+                      <td className="mono">{row.umamiStatus}</td>
                       <td className="num">{site ? num(site.visitors) : "—"}</td>
                       <td className="num">{site ? num(site.views) : "—"}</td>
                       <td className="num">{site && state.apiMetrics?.[row.id] ? num(site.requests) : "—"}</td>
                       <td>
-                        <span className={"pill " + pill[0]}>{row.missingUmamiId ? "Umami Website ID not yet generated" : pill[1]}</span>
+                        <span className={"pill " + pill[0]}>{pill[1]}</span>
                       </td>
                       <td>
                         <div className="manage-actions">
@@ -1877,7 +1887,7 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
                 {state.keys.map((key) => (
                   <tr key={key.id}>
                     <td>{key.name}</td>
-                    <td>{key.scope === "global" ? "All projects" : nameOf(key.tenantId || "")}</td>
+                    <td>{key.scope === "global" ? "All projects" : nameOf(key.tenantId || "", directory)}</td>
                     <td className="mono">{key.revoked ? "revoked" : key.hint.slice(0, 12) + "••••"}</td>
                     <td>{key.revoked ? <span className="pill bad">Revoked</span> : <span className="pill ok">Active</span>}</td>
                     <td>{key.revoked ? null : <button className="ghost" type="button" onClick={() => act("revoke", key.id)}>Revoke</button>}</td>
@@ -1928,7 +1938,11 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
 
 function Privacy({ state, bump }: { state: AppState; bump: () => void }) {
   const targets = privacyTargets(state);
-  const log = state.audit.filter((entry) => state.role === "operator" || entry.projectId === state.tenantId);
+  const log = state.audit.filter((entry) =>
+    state.role === "operator"
+      ? Boolean(state.umamiSites?.[entry.projectId])
+      : entry.projectId === state.tenantId,
+  );
   const logTable = (
     <section className="panel" style={{ marginTop: 12 }}>
       <h2>Session log</h2>
@@ -1987,8 +2001,8 @@ function Privacy({ state, bump }: { state: AppState; bump: () => void }) {
   const impact = erasureImpact(state, id, state.privacyAction, state.privacyStream, state.privacyPeriod);
   const available = impact.views > 0 || impact.requests > 0 || impact.visitors > 0;
   function confirm() {
-    if (state.privacyConfirm !== nameOf(id)) {
-      state.privacyError = "Type " + nameOf(id) + " exactly.";
+    if (state.privacyConfirm !== nameOf(id, state.umamiSites)) {
+      state.privacyError = "Type " + nameOf(id, state.umamiSites) + " exactly.";
       bump();
       return;
     }
@@ -2002,8 +2016,8 @@ function Privacy({ state, bump }: { state: AppState; bump: () => void }) {
     if (remove) state.removed[id] = true;
     state.audit.unshift({
       at: new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC",
-      actor: state.role === "operator" ? "SCF operator" : nameOf(state.tenantId),
-      project: nameOf(id),
+      actor: state.role === "operator" ? "SCF operator" : nameOf(state.tenantId, state.umamiSites),
+      project: nameOf(id, state.umamiSites),
       projectId: id,
       action: remove ? "Removed project" : "Erased " + (state.privacyStream === "both" ? "web and API" : state.privacyStream === "web" ? "web" : "API"),
       period: remove || state.privacyPeriod === "all" ? "All demo history" : windowLabel(state),
@@ -2029,7 +2043,7 @@ function Privacy({ state, bump }: { state: AppState; bump: () => void }) {
           </div>
           <span className="badge">Session only</span>
         </div>
-        <p className="mono quiet">tenant.id: {id}</p>
+        <p className="quiet">{nameOf(id, state.umamiSites)}</p>
         <div className="choice-row">
           <button className="ghost" type="button" aria-pressed={!remove} onClick={() => { state.privacyAction = "erase"; state.privacyStep = ""; state.privacyConfirm = ""; bump(); }}>
             <strong>Erase analytics</strong>
@@ -2055,7 +2069,7 @@ function Privacy({ state, bump }: { state: AppState; bump: () => void }) {
               }}
             >
               {targets.map((item) => (
-                <option key={item} value={item}>{nameOf(item)}</option>
+                <option key={item} value={item}>{nameOf(item, state.umamiSites)}</option>
               ))}
             </select>
           </label>
@@ -2154,13 +2168,13 @@ function Privacy({ state, bump }: { state: AppState; bump: () => void }) {
           <h2>{remove ? "Remove this project?" : "Erase selected analytics?"}</h2>
           <p className="quiet">{remove ? "The project leaves enrollment, dashboards, and comparisons in this session." : "The project and its integration id stay. Only the selected sample data is cleared in this session."}</p>
           <div className="impact-grid">
-            <div><span>Project</span><strong className="name-stat">{nameOf(id)}</strong></div>
+            <div><span>Project</span><strong className="name-stat">{nameOf(id, state.umamiSites)}</strong></div>
             <div><span>Visitors</span><strong>{num(impact.visitors)}</strong></div>
             <div><span>Page views</span><strong>{num(impact.views)}</strong></div>
           </div>
           <p className="quiet">{num(impact.requests)} API requests. Reason: {state.privacyReason}</p>
           <label>
-            Type <strong>{nameOf(id)}</strong> to confirm
+            Type <strong>{nameOf(id, state.umamiSites)}</strong> to confirm
             <input
               aria-label="Confirm project name"
               value={state.privacyConfirm}

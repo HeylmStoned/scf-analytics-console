@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { ProjectIcon } from "@/components/ProjectIcon";
 import { Roadmap } from "@/components/Roadmap";
 import { Stage } from "@/components/views";
-import { API_METRICS_NOTICE, PROFILES, RANGE_LABELS, RANGES, SNIPPET, availableProject, createState, headline, isPublic, nameOf, scopeIds, webMetricSource, windowLabel, type ApiFixture, type AppState, type LiveProject, type RangeKey } from "@/lib/model";
+import { API_METRICS_NOTICE, PROFILES, RANGE_LABELS, RANGES, SNIPPET, availableProject, createState, headline, isPublic, nameOf, profileOf, scopeIds, webMetricSource, windowLabel, type ApiFixture, type AppState, type LiveProject, type RangeKey } from "@/lib/model";
 
 const MARK = "M12.003 1.716c-1.37 0-2.7.27-3.948.78A10.18 10.18 0 0 0 2.66 7.901a10.136 10.136 0 0 0-.797 3.954c0 .258.01.516.027.775a1.942 1.942 0 0 1-1.055 1.88L0 14.934v1.902l2.463-1.26.072-.032v.005l.77-.39.758-.385.066-.039 14.807-7.56 1.666-.847 3.392-1.732V2.694L17.792 5.86 3.744 13.025l-.104.055-.017-.115a8.286 8.286 0 0 1-.071-1.105c0-2.255.88-4.377 2.474-5.977a8.462 8.462 0 0 1 2.71-1.82 8.513 8.513 0 0 1 3.2-.654h.067a8.41 8.41 0 0 1 4.09 1.055l1.628-.83.126-.066a10.11 10.11 0 0 0-5.845-1.853zM24 7.143 5.047 16.808l-1.666.847L0 19.382v1.902l3.282-1.671 2.91-1.485 14.058-7.153.105-.055.016.115c.05.369.072.743.072 1.11 0 2.255-.88 4.383-2.475 5.978a8.461 8.461 0 0 1-2.71 1.82 8.305 8.305 0 0 1-3.2.654h-.06c-1.441 0-2.86-.369-4.102-1.061l-.066.033-1.683.857c.594.418 1.232.776 1.903 1.062a10.11 10.11 0 0 0 3.947.797 10.09 10.09 0 0 0 7.17-2.975 10.136 10.136 0 0 0 2.969-7.18c0-.259-.005-.523-.027-.781a1.942 1.942 0 0 1 1.055-1.88L24 9.044z";
 
@@ -26,14 +26,13 @@ const RANGE_VIEWS = new Set(["overview", "web", "api", "compare"]);
 
 const WEB_REPORT_VIEWS = new Set(["overview", "web", "compare", "manage"]);
 
-type UmamiResult = { scope: string; projects: Record<string, LiveProject> | null; error?: string };
+type UmamiResult = { scope: string; projects: Record<string, LiveProject> | null; directory?: AppState["managedSites"]; error?: string };
 
-export function Console({ introduction, betaConfigured, publicProjects }: {
+export function Console({ introduction, umamiSites }: {
   introduction: ReactNode;
-  betaConfigured: boolean;
-  publicProjects: string[];
+  umamiSites: AppState["umamiSites"];
 }) {
-  const state = useRef<AppState>(createState(betaConfigured, publicProjects));
+  const state = useRef<AppState>(createState(umamiSites));
   const [report, setReport] = useState<UmamiResult | null>(null);
   const [traffic, setTraffic] = useState<{ scope: string; projects?: Record<string, ApiFixture>; error?: string } | null>(null);
   const [, setTick] = useState(0);
@@ -54,6 +53,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
   const activeReport = report?.scope === scope ? report : null;
   const first = Object.values(activeReport?.projects ?? {})[0];
   current.umami = activeReport?.projects ?? null;
+  current.managedSites = activeReport?.directory ?? null;
   current.umamiLabels = first?.labels ?? null;
   current.umamiWhen = first?.when ?? null;
 
@@ -64,13 +64,13 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
       signal: controller.signal,
     }).then(async (response) => {
       if (!response.ok) {
-        const error = response.status === 404 ? "Umami is not configured for this workspace."
+        const error = response.status === 404 ? "No project with recorded pageviews is available for this workspace."
           : "Umami metrics are temporarily unavailable.";
         if (!controller.signal.aborted) setReport({ scope, projects: null, error });
         return;
       }
-      const body = (await response.json()) as { projects: Record<string, LiveProject> };
-      if (!controller.signal.aborted) setReport({ scope, projects: body.projects });
+      const body = (await response.json()) as Pick<UmamiResult, "projects" | "directory">;
+      if (!controller.signal.aborted) setReport({ scope, ...body });
     }).catch(() => {
       if (!controller.signal.aborted) setReport({ scope, projects: null, error: "Umami metrics are temporarily unavailable." });
     });
@@ -182,7 +182,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
 
   useEffect(() => {
     const wide = current.role === "operator" || current.role === "public";
-    const title = COPY[current.view]?.(wide, nameOf(current.tenantId), PROFILES[current.tenantId]?.detail || "This project")[0];
+    const title = COPY[current.view]?.(wide, nameOf(current.tenantId, current.umamiSites), PROFILES[current.tenantId]?.detail || "This project")[0];
     if (title && !booting && current.role) document.title = title + " · Stellar ecosystem analytics";
     else if (!booting && !current.role) document.title = "Choose a view · Stellar ecosystem analytics";
   });
@@ -242,8 +242,8 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
                 <button key={tenant.id} type="button" onClick={() => enterTenant(tenant.id)}>
                   <ProjectIcon id={tenant.id} />
                   <span>
-                    <strong>{PROFILES[tenant.id]?.name || tenant.id}</strong>
-                    <span>{PROFILES[tenant.id]?.detail || "Project workspace"}</span>
+                    <strong>{nameOf(tenant.id, current.umamiSites)}</strong>
+                    <span>{profileOf(tenant.id, current.umamiSites).domain || profileOf(tenant.id).detail}</span>
                   </span>
                 </button>
               ))}
@@ -292,13 +292,13 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
   const showReportStatus = Boolean(scope && !activeReport);
   const fallbackMessage = activeReport?.error;
   const wide = operator || publicMode;
-  const profile = PROFILES[current.tenantId];
+  const profile = current.tenantId ? profileOf(current.tenantId, current.umamiSites) : undefined;
   const copy = (COPY[current.view] || COPY.overview)(wide, profile?.name || "Project", profile?.detail || "This project");
   const liveWeb = view === "web" && current.umami
     ? "Live web totals come directly from Umami for the selected period."
     : "";
   const description = publicMode
-    ? scope && [liveWeb, "To protect visitor privacy, the public dashboard shows only aggregate web totals."].filter(Boolean).join(" ")
+    ? scope && [liveWeb, "To protect visitor privacy, the public dashboard shows only aggregate web totals for connected projects."].filter(Boolean).join(" ")
     : liveWeb || copy[1];
   const ids = scopeIds(current);
   const listed = ids.length;
@@ -313,10 +313,9 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
   function exportData() {
     if (isPublic(current) || showReportStatus) return;
 
-    const projectIds = scopeIds(current).filter((id) => {
-      if (!PROFILES[id]) return false;
-      return current.view !== "api" || current.project === "all" || id === current.project;
-    });
+    const projectIds = scopeIds(current).filter((id) =>
+      current.view !== "api" || current.project === "all" || id === current.project,
+    );
     if (projectIds.length === 0) return;
 
     const payload = {
@@ -386,7 +385,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
           id,
           name: label,
           detail: "Just enrolled",
-          proof: "Umami script pending",
+          umamiStatus: "Tracking setup pending",
           status: current.approval ? "pending" : "hidden",
         });
       }
@@ -435,7 +434,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
               {current.roster.tenants.filter((tenant) => availableProject(current, tenant.id)).map((tenant) => (
                 <button key={tenant.id} type="button" aria-pressed={current.role === tenant.id} onClick={() => enterTenant(tenant.id)}>
                   <ProjectIcon id={tenant.id} />
-                  <span>{PROFILES[tenant.id]?.name || tenant.id}</span>
+                  <span>{nameOf(tenant.id, current.umamiSites)}</span>
                 </button>
               ))}
               <button type="button" onClick={openTenantPicker}>
@@ -532,7 +531,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
               </div>
             </div>
           )}
-          {fallbackMessage ? <p className="caption" role="status">{fallbackMessage} Showing sample web metrics.</p> : null}
+          {fallbackMessage ? <p className="caption" role="status">{fallbackMessage}{ids.length && view !== "manage" ? " Showing sample web metrics." : ""}</p> : null}
           <div className={showRoadmap ? "enter roadmap-content" : "enter"}>
             {showRoadmap ? (
               <Roadmap />
@@ -543,6 +542,10 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
             ) : view === "api" && !current.apiMetrics ? (
               <section className="panel" role="status">
                 <p className="quiet">{activeTraffic?.error ?? "Loading sample API metrics…"}</p>
+              </section>
+            ) : view === "api" && current.apiMetrics && !Object.keys(current.apiMetrics).length ? (
+              <section className="panel" role="status">
+                <p className="quiet">No simulated API metrics are available for this project.</p>
               </section>
             ) : (
               <Stage state={current} bump={bump} onOpen={enterTenant} />
@@ -587,7 +590,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
                   />
                 </label>
                 <p className="field-hint">Used in the script tag and API tenant id. Letters, numbers, hyphens.</p>
-                <p className="field-label">Proof of installation</p>
+                <p className="field-label">Umami setup</p>
                 <p className="field-hint">Add the Umami tracking script to the project website to complete the setup.</p>
                 <div className="modal-actions">
                   <button className="ghost" type="button" onClick={closeEnroll}>Cancel</button>
@@ -602,7 +605,7 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
                 <dl className="enroll-summary">
                   <div><dt>Name</dt><dd>{current.enrollName.trim() || current.enrollId}</dd></div>
                   <div><dt>Project id</dt><dd className="mono">{current.enrollId}</dd></div>
-                  <div><dt>Proof</dt><dd>Umami tracking script</dd></div>
+                  <div><dt>Setup</dt><dd>Install the Umami tracking script</dd></div>
                   <div><dt>Dashboard</dt><dd>Hidden until SCF lists it</dd></div>
                 </dl>
                 <div className="modal-actions">
@@ -659,8 +662,8 @@ export function Console({ introduction, betaConfigured, publicProjects }: {
                   <button key={tenant.id} type="button" aria-pressed={current.role === tenant.id} onClick={() => enterTenant(tenant.id)}>
                     <ProjectIcon id={tenant.id} />
                     <span>
-                      <strong>{PROFILES[tenant.id]?.name || tenant.id}</strong>
-                      <span>{PROFILES[tenant.id]?.detail || "Project workspace"}</span>
+                      <strong>{nameOf(tenant.id, current.umamiSites)}</strong>
+                      <span>{profileOf(tenant.id, current.umamiSites).domain || profileOf(tenant.id).detail}</span>
                     </span>
                   </button>
                 ))}

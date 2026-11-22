@@ -1,4 +1,5 @@
-import { publicUmamiProjects, umamiDashboard } from "@/lib/umami";
+import { isAnalyticsProjectId } from "@/lib/model";
+import { umamiDashboard } from "@/lib/umami";
 
 export const dynamic = "force-dynamic";
 
@@ -16,30 +17,18 @@ export async function GET(request: Request) {
     return json({ error: "Invalid analytics view" }, 400);
   }
 
-  if (mode === "tenant" && tenant !== "alpha" && tenant !== "beta") {
+  if (mode === "tenant" && (!tenant || !isAnalyticsProjectId(tenant))) {
     return json({ error: "Invalid project" }, 400);
   }
   if (view === "manage" && mode !== "scf") return json({ error: "Select the SCF demo workspace" }, 403);
 
-  const publicProjects = publicUmamiProjects(process.env.UMAMI_PUBLIC_PROJECTS);
-  const scope = mode === "tenant" ? publicProjects.filter((id) => id === tenant) : publicProjects;
-  const level = mode === "public" ? "totals" : view === "overview" ? "activity" : view === "web" ? "audience" : "totals";
+  const level = mode === "public" ? "totals"
+    : view === "overview" ? "activity"
+    : view === "web" ? "audience"
+    : "totals";
 
   try {
-    const body = await umamiDashboard(
-      {
-        UMAMI_API_KEY: process.env.UMAMI_API_KEY,
-        UMAMI_API_CLIENT_ENDPOINT: process.env.UMAMI_API_CLIENT_ENDPOINT,
-        UMAMI_URL: process.env.UMAMI_URL,
-        UMAMI_USER: process.env.UMAMI_USER,
-        UMAMI_PASSWORD: process.env.UMAMI_PASSWORD,
-        UMAMI_ALPHA: process.env.UMAMI_ALPHA,
-        UMAMI_BETA: process.env.UMAMI_BETA,
-      },
-      range,
-      scope,
-      level,
-    );
+    const body = await umamiDashboard(process.env, range, mode === "tenant" ? tenant : null, level, view === "manage");
     if (!body) return json({ error: "Umami is not configured for this scope" }, 404);
     return json(body);
   } catch {

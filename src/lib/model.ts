@@ -128,7 +128,7 @@ export type LiveProject = {
   when?: string[];
   delta: { pageviews: number; visitors: number; bounce: number; duration: number };
 };
-export type Waiting = { id: string; name: string; detail: string; proof: string; status: string };
+export type Waiting = { id: string; name: string; detail: string; umamiStatus: string; status: string };
 export type Audit = {
   at: string;
   actor: string;
@@ -152,8 +152,8 @@ export type AppState = {
   mode: "" | "public" | "scf" | "tenant";
   gateStep: "modes" | "tenant";
   tenantId: string;
-  betaConfigured: boolean;
-  publicProjects: string[];
+  umamiSites: UmamiDirectory | null;
+  managedSites: UmamiDirectory | null;
   roster: { tenants: { id: string; token: string }[]; operatorToken: string } | null;
   view: string;
   range: RangeKey;
@@ -219,9 +219,42 @@ type Profile = {
   os: { name: string; share: number }[];
 };
 
+export const UMAMI_PROJECT_DOMAINS = {
+  alpha: "scf-umami-poc-production.up.railway.app",
+  beta: "prismfi.cc",
+  lend: "lend.xyz",
+} as const;
+export type UmamiProjectId = keyof typeof UMAMI_PROJECT_DOMAINS;
+
+export function isUmamiProject(id: string): id is UmamiProjectId {
+  return Object.hasOwn(UMAMI_PROJECT_DOMAINS, id);
+}
+
+export type UmamiDirectory = Record<string, { name: string; domain: string }>;
+
+export function isAnalyticsProjectId(id: string) {
+  return isUmamiProject(id) || id.startsWith("site:");
+}
+
+const EMPTY_WEB_PROFILE = {
+  detail: "Stellar project",
+  hue: "lavender",
+  pageviews: 0,
+  visitors: 0,
+  bounce: 0,
+  durationSec: 0,
+  delta: { pageviews: 0, visitors: 0, bounce: 0, duration: 0 },
+  pages: [],
+  referrers: [],
+  countries: [],
+  devices: [],
+  browsers: [],
+  os: [],
+} satisfies Omit<Profile, "name">;
+
 export const PROFILES: Record<string, Profile> = {
   alpha: {
-    name: "scf-umami-poc-production.up.railway.app",
+    name: UMAMI_PROJECT_DOMAINS.alpha,
     detail: "Analytics demo",
     hue: "lavender",
     pageviews: 48210,
@@ -327,17 +360,28 @@ export const PROFILES: Record<string, Profile> = {
       { name: "iOS", share: 0.05 },
     ],
   },
+  lend: {
+    ...EMPTY_WEB_PROFILE,
+    name: "Lend.xyz",
+    hue: "mint",
+  },
 };
 
-export function createState(betaConfigured = false, publicProjects = ["alpha"]): AppState {
+export function profileOf(id: string, sites?: UmamiDirectory | null): Profile & { domain?: string } {
+  const profile = Object.hasOwn(PROFILES, id) ? PROFILES[id] : { ...EMPTY_WEB_PROFILE, name: id };
+  const site = sites?.[id];
+  return site ? { ...profile, ...site } : profile;
+}
+
+export function createState(umamiSites: UmamiDirectory | null): AppState {
   return {
     token: "",
     role: "",
     mode: "",
     gateStep: "modes",
     tenantId: "",
-    betaConfigured,
-    publicProjects,
+    umamiSites,
+    managedSites: null,
     roster: null,
     view: "overview",
     range: "30d",
@@ -364,7 +408,7 @@ export function createState(betaConfigured = false, publicProjects = ["alpha"]):
     privacyConfirm: "",
     privacyStep: "",
     privacyError: "",
-    waiting: [{ id: "lend", name: "Lend.xyz", detail: "Awaiting Umami website ID", proof: "Umami script pending", status: "pending" }],
+    waiting: [],
     keys: [{ id: "live", name: "Ecosystem reader", hint: "scf_mtr_9f3a2c1e", revoked: false, scope: "global" }],
     chartFocus: "both",
     webReport: "pages",
@@ -403,8 +447,8 @@ export function ms(value: number | null) {
   if (value == null) return "—";
   return value >= 1000 ? (value / 1000).toLocaleString("en", { maximumFractionDigits: 1 }) + " s" : value + " ms";
 }
-export function nameOf(id: string) {
-  return PROFILES[id]?.name ?? id;
+export function nameOf(id: string, sites?: UmamiDirectory | null) {
+  return sites?.[id]?.name ?? PROFILES[id]?.name ?? id;
 }
 export function hueOf(id: string) {
   return PROFILES[id]?.hue ?? "lavender";
@@ -448,15 +492,15 @@ function streamOff(state: AppState, id: string, stream: "web" | "api", range: Ra
 }
 
 export function stats(state: AppState, id: string, range: RangeKey = state.range): SiteStats {
-  const profile = PROFILES[id];
+  const profile = profileOf(id);
   const extra = state.extra[id] || { views: 0, paths: {}, api: {} };
   const scale = SCALE[range];
   const baseViews = Math.round(profile.pageviews * scale);
   let visitors = Math.round(profile.visitors * scale);
   const bounceShift = range === "24h" ? 0.018 : range === "90d" ? -0.012 : 0;
   const durationShift = range === "24h" ? -8 : range === "7d" ? 4 : 0;
-  let bounce = profile.bounce + bounceShift;
-  let durationValue = profile.durationSec + durationShift;
+  let bounce = profile.pageviews ? profile.bounce + bounceShift : 0;
+  let durationValue = profile.pageviews ? profile.durationSec + durationShift : 0;
   const pages = profile.pages.map((page) => {
     const views = Math.round(page.share * baseViews) + (extra.paths[page.path] || 0);
     const ratio = profile.visitors / profile.pageviews;
@@ -536,7 +580,7 @@ export function stats(state: AppState, id: string, range: RangeKey = state.range
 }
 
 export function availableProject(state: AppState, id: string) {
-  return Boolean(PROFILES[id]) && (id !== "beta" || state.betaConfigured);
+  return Boolean(state.umamiSites && Object.hasOwn(state.umamiSites, id));
 }
 
 export function liveSites(state: AppState, ids: string[]) {
@@ -560,11 +604,12 @@ export function listingOf(state: AppState, id: string) {
 }
 export function scopeIds(state: AppState) {
   if (state.role === "operator" || state.role === "public") {
-    return (state.roster?.tenants || []).map((tenant) => tenant.id).filter((id) => {
+    const rosterIds = state.roster?.tenants.map((tenant) => tenant.id) ?? [];
+    const ids = new Set([...rosterIds, ...Object.keys(state.umamiSites ?? {})]);
+    return [...ids].filter((id) => {
       if (!availableProject(state, id) || state.removed[id]) return false;
       if (!isPublic(state)) return true;
-      return listingOf(state, id) === "listed" && state.publicProjects.includes(id)
-        && (!state.umami || Object.hasOwn(state.umami, id));
+      return listingOf(state, id) === "listed" && (!state.umami || Object.hasOwn(state.umami, id));
     });
   }
   return availableProject(state, state.tenantId) ? [state.tenantId] : [];
@@ -683,7 +728,7 @@ export function categoryRows(state: AppState, ids: string[], metric: string): { 
     return ids
       .flatMap((id) =>
         stats(state, id).pages.map((page) => ({
-          name: ids.length > 1 ? nameOf(id) + " · " + page.path : page.path,
+          name: ids.length > 1 ? nameOf(id, state.umamiSites) + " · " + page.path : page.path,
           count: page.views,
           bounce: page.bounce,
           duration: page.duration,
@@ -719,7 +764,7 @@ export function previewPath(input: string) {
   return (path.startsWith("/") ? "/" : "") + segments.join("/");
 }
 export function privacyTargets(state: AppState) {
-  const ids = state.role === "operator" ? ["alpha", "beta"] : [state.tenantId];
+  const ids = state.role === "operator" ? Object.keys(state.umamiSites ?? {}) : [state.tenantId];
   return ids.filter((id) => availableProject(state, id) && !state.removed[id]);
 }
 export function erasureImpact(state: AppState, id: string, action: string, stream: string, period: string) {

@@ -1,13 +1,12 @@
-import { nameOf, WEB_AUDIENCE_DIMENSIONS, type LiveProject, type Named, type WebVitals } from "./model";
+import { nameOf, UMAMI_PROJECT_DOMAINS, WEB_AUDIENCE_DIMENSIONS, type LiveProject, type Named, type UmamiDirectory, type WebVitals } from "./model";
 
-export type UmamiEnv = {
+type UmamiEnv = NodeJS.ProcessEnv & {
   UMAMI_API_KEY?: string;
   UMAMI_API_CLIENT_ENDPOINT?: string;
   UMAMI_URL?: string;
   UMAMI_USER?: string;
   UMAMI_PASSWORD?: string;
-  UMAMI_ALPHA?: string;
-  UMAMI_BETA?: string;
+  UMAMI_TRACKER_DOMAINS?: string;
 };
 
 const RANGES: Record<string, { days: number; unit: string }> = {
@@ -37,7 +36,7 @@ const UTM_DIMENSIONS = {
 const countryNames = new Intl.DisplayNames(["en"], { type: "region", fallback: "none" });
 const languages = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
 let session: { token: string; until: number } | null = null;
-type Dashboard = { source: "umami"; range: string; projects: Record<string, LiveProject> };
+type Dashboard = { source: "umami"; range: string; projects: Record<string, LiveProject>; directory?: UmamiDirectory };
 const boards = new Map<string, { until: number; response: Promise<Dashboard> }>();
 
 function num(value: unknown): number {
@@ -153,38 +152,167 @@ function stamp(value: string, unit: string): { label: string; when: string } {
 }
 
 type ReportLevel = "totals" | "audience" | "activity" | "detail";
+type UmamiSite = { id: string; websiteId: string; name: string; domain: string };
+type WebsiteRecord = { id?: string; websiteId?: string; name?: string; domain?: string; deletedAt?: string | null };
+type WebsitePage = { data: WebsiteRecord[]; count: number; pageSize: number };
 
-export function publicUmamiProjects(value: string | undefined) {
-  return (value ?? "alpha").split(",").map((id) => id.trim()).filter((id) => id === "alpha" || id === "beta");
+let directoryCache: {
+  endpoint: string;
+  token: string;
+  until: number;
+  response: Promise<WebsiteRecord[]>;
+  pageviewChecks: Map<string, Promise<boolean>>;
+} | undefined;
+
+function hostname(value: string) {
+  const domain = value.trim();
+  if (!domain) return "";
+  try {
+    const url = new URL(domain.includes("://") ? domain : "https://" + domain);
+    return url.hostname.toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }
 
-export async function umamiDashboard(env: UmamiEnv, range: string, scope: string[], level: ReportLevel): Promise<Dashboard | null> {
-  const sites = Object.entries({ alpha: env.UMAMI_ALPHA, beta: env.UMAMI_BETA })
-    .flatMap(([id, websiteId]) => scope.includes(id) && websiteId?.trim() ? [{ id, websiteId: websiteId.trim() }] : []);
-  if (!sites.length) return null;
+async function discoverUmami(env: UmamiEnv) {
   const apiKey = env.UMAMI_API_KEY?.trim();
-  const selfHostedUrl = env.UMAMI_URL?.replace(/\/+$/, "");
+  const selfHostedUrl = env.UMAMI_URL?.trim().replace(/\/+$/, "");
   if (!apiKey && (!selfHostedUrl || !env.UMAMI_PASSWORD)) return null;
   const endpoint = apiKey
     ? (env.UMAMI_API_CLIENT_ENDPOINT?.trim() || "https://api.umami.is/v1").replace(/\/+$/, "")
     : selfHostedUrl + "/api";
+  const token = apiKey || (await tokenFor(env, endpoint));
+
+  if (!directoryCache || directoryCache.endpoint !== endpoint ||
+      directoryCache.token !== token || directoryCache.until <= Date.now()) {
+    const response = listWebsites(endpoint, token);
+    directoryCache = { endpoint, token, until: Date.now() + 60_000, response, pageviewChecks: new Map() };
+    void response.catch(() => {
+      if (directoryCache?.response === response) directoryCache = undefined;
+    });
+  }
+
+  const cache = directoryCache;
+  const properties = new Map<string, { name: string; domain: string; hostname: string }>();
+  for (const site of await cache.response) {
+    const websiteId = site?.id ?? site?.websiteId;
+    const domain = typeof site?.domain === "string" ? site.domain.trim() : "";
+    const host = hostname(domain);
+    if (!host || typeof websiteId !== "string" || !websiteId.trim() || site.deletedAt) continue;
+    const name = typeof site.name === "string" ? site.name.trim() : "";
+    properties.set(websiteId.trim(), { name: name || domain, domain, hostname: host });
+  }
+
+  const trackerDomains = env.UMAMI_TRACKER_DOMAINS?.split(",").map(hostname).filter(Boolean);
+  const demoDomains = trackerDomains?.length ? trackerDomains : [UMAMI_PROJECT_DOMAINS.alpha, "scf-console-production.up.railway.app"];
+  // Keep established IDs for the demo roster and sample API fixtures.
+  const aliases = new Map<string, string>();
+  const candidates = [
+    ["alpha", demoDomains],
+    ["beta", [UMAMI_PROJECT_DOMAINS.beta]],
+    ["lend", ["app.lend.xyz", UMAMI_PROJECT_DOMAINS.lend]],
+  ] as const;
+  for (const [id, domains] of candidates) {
+    for (const domain of domains) {
+      const match = [...properties].find(([websiteId, site]) => site.hostname === domain && !aliases.has(websiteId));
+      if (match) {
+        aliases.set(match[0], id);
+        break;
+      }
+    }
+  }
+  const sites: UmamiSite[] = [...properties].map(([websiteId, { name, domain }]) => ({
+    id: aliases.get(websiteId) ?? "site:" + websiteId,
+    websiteId,
+    name,
+    domain,
+  }));
+  return { endpoint, token, sites, pageviewChecks: cache.pageviewChecks };
+}
+
+async function listWebsites(endpoint: string, token: string) {
+  const websites: WebsiteRecord[] = [];
+  for (let page = 1; ; page++) {
+    const result = await umami(endpoint, "/websites?includeTeams=true&pageSize=100&page=" + page, token) as WebsitePage | WebsiteRecord[];
+    if (Array.isArray(result)) return result;
+    if (!Array.isArray(result?.data) || !Number.isInteger(result.count) ||
+        !Number.isInteger(result.pageSize) || result.pageSize < 1) {
+      throw new Error("Invalid Umami website list");
+    }
+    websites.push(...result.data);
+    if (!result.data.length || page * result.pageSize >= result.count) return websites;
+  }
+}
+
+function projectDirectory(sites: UmamiSite[]): UmamiDirectory {
+  return Object.fromEntries(sites.map(({ id, name, domain }) => [id, { name, domain }]));
+}
+
+async function sitesWithPageviews(
+  integration: NonNullable<Awaited<ReturnType<typeof discoverUmami>>>,
+  candidates: UmamiSite[],
+) {
+  const { endpoint, token, pageviewChecks } = integration;
+  const query = "?startAt=1&endAt=" + Date.now() + "&timezone=UTC";
+  const checked = await Promise.all(candidates.map(async (site) => {
+    let check = pageviewChecks.get(site.websiteId);
+    if (!check) {
+      const lookup = umami(endpoint, "/websites/" + encodeURIComponent(site.websiteId) + "/stats" + query, token)
+        .then((data) => num((data as Stats | undefined)?.pageviews) > 0);
+      pageviewChecks.set(site.websiteId, lookup);
+      check = lookup;
+    }
+
+    try {
+      return await check ? site : null;
+    } catch {
+      if (pageviewChecks.get(site.websiteId) === check) pageviewChecks.delete(site.websiteId);
+      return null;
+    }
+  }));
+  return checked.filter((site) => site !== null);
+}
+
+export async function activeUmamiProjects(env: UmamiEnv): Promise<UmamiDirectory> {
+  const integration = await discoverUmami(env);
+  return integration ? projectDirectory(await sitesWithPageviews(integration, integration.sites)) : {};
+}
+
+export async function umamiDashboard(
+  env: UmamiEnv,
+  range: string,
+  tenant: string | null,
+  level: ReportLevel,
+  includeInactive = false,
+): Promise<Dashboard | null> {
+  const integration = await discoverUmami(env);
+  if (!integration) return null;
+  const { endpoint, token } = integration;
+  const candidates = tenant ? integration.sites.filter(({ id }) => id === tenant) : integration.sites;
+  const sites = includeInactive ? candidates : await sitesWithPageviews(integration, candidates);
+  if (!sites.length && !includeInactive) return null;
   if (!Object.hasOwn(RANGES, range)) range = "30d";
   const spec = RANGES[range];
-  const key = JSON.stringify([endpoint, range, sites, level]);
+  const key = JSON.stringify([endpoint, range, sites, level, includeInactive]);
   const now = Date.now();
   const hit = boards.get(key);
   if (hit && hit.until > now) return hit.response;
 
   const response = (async (): Promise<Dashboard> => {
-    const token = apiKey || (await tokenFor(env, endpoint));
     const query = new URLSearchParams({
       startAt: String(now - spec.days * 86_400_000),
       endAt: String(now),
       timezone: "UTC",
     }).toString();
-    const projects = await Promise.all(sites.map(({ id, websiteId }) =>
-      project(endpoint, token, id, websiteId, query, spec.unit, level),
-    ));
+    const reports = sites.map(({ id, websiteId }) => project(endpoint, token, id, websiteId, query, spec.unit, level));
+    if (includeInactive) {
+      const results = await Promise.allSettled(reports);
+      const projects = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+      return { source: "umami", range, projects: Object.fromEntries(projects), directory: projectDirectory(sites) };
+    }
+
+    const projects = await Promise.all(reports);
     if (level === "activity" && projects.length > 1) alignActivity(projects, spec.unit);
     return { source: "umami", range, projects: Object.fromEntries(projects) };
   })();
