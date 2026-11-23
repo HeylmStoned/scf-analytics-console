@@ -61,7 +61,12 @@ function Change({ value, goodWhenUp, range }: { value: number; goodWhenUp: boole
 }
 
 function SourceBadge({ source }: { source: string }) {
-  return <span className={"kpi-badge" + (source === "Live" || source === "Umami" ? " live" : "")}>{source}</span>;
+  return <span className={"kpi-badge" + (source === "Live" || source === "Umami" || source === "Live data" ? " live" : "")}>{source}</span>;
+}
+
+function apiBadge(state: AppState, long = false) {
+  if (state.apiSource === "collector") return long ? "Live data" : "Live";
+  return long ? "Sample data" : "Sample";
 }
 
 function Kpi({
@@ -168,7 +173,11 @@ function Freshness({ state }: { state: AppState }) {
     <p className="freshness">
       {showSource ? <span className={source === "Live" ? "live" : ""}>{source === "Live"
         ? "Web · Umami synced" : source === "Sample" ? "Web · sample" : "Web · live and sample"}</span> : null}
-      {state.view === "overview" && !isPublic(state) && state.apiMetrics ? <span>API · collector sample</span> : null}
+      {state.view === "overview" && !isPublic(state) && state.apiMetrics ? (
+        <span className={state.apiSource === "collector" ? "live" : ""}>
+          {state.apiSource === "collector" ? "API · live collector" : "API · sample"}
+        </span>
+      ) : null}
       {alternateProjects.map((id) => <span key={id}>{nameOf(id, state.umamiSites)} · Umami data from a different domain</span>)}
     </p>
   );
@@ -295,7 +304,7 @@ function ApiCurve({ state, ids, bump }: { state: AppState; ids: string[]; bump: 
           <h2>API volume</h2>
           <p>Requests per {state.range === "24h" ? "hour" : "day"} · pin a day to inspect.</p>
         </div>
-        <span className="badge">Sample data</span>
+        <span className={"badge" + (state.apiSource === "collector" ? " live" : "")}>{apiBadge(state, true)}</span>
       </div>
       <GroupedChart series={series} label="API requests" {...chartProps(state, series)} onPin={pinDay(state, bump, "api")} />
     </section>
@@ -362,9 +371,9 @@ function ProjectTable({ state, ids, bump, onOpen }: { state: AppState; ids: stri
               <th>Web source</th>
               {showApi ? (
                 <>
-                  <th>API <SourceBadge source="Sample" /></th>
-                  <th>Errors <SourceBadge source="Sample" /></th>
-                  <th>p95 <SourceBadge source="Sample" /></th>
+                  <th>API <SourceBadge source={apiBadge(state)} /></th>
+                  <th>Errors <SourceBadge source={apiBadge(state)} /></th>
+                  <th>p95 <SourceBadge source={apiBadge(state)} /></th>
                 </>
               ) : null}
               {privateMode ? <th /> : null}
@@ -1046,7 +1055,7 @@ function ApiDetail({
             Focus status {focus.status} · {pct(share)} of project API volume · {windowLabel(state)}
           </p>
         </div>
-        <span className="badge">Sample</span>
+        <span className={"badge" + (state.apiSource === "collector" ? " live" : "")}>{apiBadge(state)}</span>
       </div>
       <div className="detail-kpis">
         <div>
@@ -1184,7 +1193,7 @@ function DayDetail({
         </div>
         {showApi ? (
           <div>
-            <p className="metric-label"><span>API requests</span><SourceBadge source="Sample" /></p>
+            <p className="metric-label"><span>API requests</span><SourceBadge source={apiBadge(state)} /></p>
             <strong>{num(requests)}</strong>
           </div>
         ) : null}
@@ -1197,7 +1206,7 @@ function DayDetail({
               <th>Visitors</th>
               <th>Views</th>
               <th>Web source</th>
-              {showApi ? <th>API <SourceBadge source="Sample" /></th> : null}
+              {showApi ? <th>API <SourceBadge source={apiBadge(state)} /></th> : null}
             </tr>
           </thead>
           <tbody>
@@ -1274,7 +1283,7 @@ export function Stage({ state, bump, onOpen }: {
                 value={num(data.requests)}
                 hint={pct(data.errorRate) + " error rate"}
                 icon={apiIcon}
-                badge="Sample"
+                badge={apiBadge(state)}
                 onSelect={() => {
                   state.view = "api";
                   bump();
@@ -1285,7 +1294,7 @@ export function Stage({ state, bump, onOpen }: {
                 value={ms(data.p95)}
                 hint={"p50 " + ms(data.p50)}
                 icon={latencyIcon}
-                badge="Sample"
+                badge={apiBadge(state)}
                 onSelect={() => {
                   state.view = "api";
                   bump();
@@ -1371,10 +1380,10 @@ export function Stage({ state, bump, onOpen }: {
     return (
       <>
         <section className="kpis">
-          <Kpi label="API requests" value={num(data.requests)} hint={<Change value={data.delta.requests} goodWhenUp range={state.range} />} badge="Sample" />
-          <Kpi label="Error rate" value={pct(data.errorRate)} hint={<Change value={data.delta.errors} goodWhenUp={false} range={state.range} />} badge="Sample" />
-          <Kpi label="p50" value={ms(data.p50)} hint="Bucket ceiling" badge="Sample" />
-          <Kpi label="p95" value={ms(data.p95)} hint="Bucket ceiling" badge="Sample" />
+          <Kpi label="API requests" value={num(data.requests)} hint={<Change value={data.delta.requests} goodWhenUp range={state.range} />} badge={apiBadge(state)} />
+          <Kpi label="Error rate" value={pct(data.errorRate)} hint={<Change value={data.delta.errors} goodWhenUp={false} range={state.range} />} badge={apiBadge(state)} />
+          <Kpi label="p50" value={ms(data.p50)} hint="Bucket ceiling" badge={apiBadge(state)} />
+          <Kpi label="p95" value={ms(data.p95)} hint="Bucket ceiling" badge={apiBadge(state)} />
         </section>
         <div className="attention-grid">
           <section className="panel">
@@ -1383,7 +1392,7 @@ export function Stage({ state, bump, onOpen }: {
                 <h2>Needs attention · 5xx</h2>
                 <p>Highest volume server errors in range.</p>
               </div>
-              <span className="badge">Sample</span>
+              <span className={"badge" + (state.apiSource === "collector" ? " live" : "")}>{apiBadge(state)}</span>
             </div>
             {failing.length ? (
               <div className="rank-list">
@@ -1421,7 +1430,7 @@ export function Stage({ state, bump, onOpen }: {
                 <h2>Needs attention · slowest p95</h2>
                 <p>Routes with the highest latency ceiling.</p>
               </div>
-              <span className="badge">Sample</span>
+              <span className={"badge" + (state.apiSource === "collector" ? " live" : "")}>{apiBadge(state)}</span>
             </div>
             <div className="rank-list">
               {slowest.map((row) => (

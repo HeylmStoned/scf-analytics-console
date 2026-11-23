@@ -50,6 +50,8 @@ export function Console({ introduction, umamiSites }: {
     : "";
   const activeTraffic = traffic?.scope === trafficScope ? traffic : null;
   current.apiMetrics = activeTraffic?.projects ?? null;
+  current.apiSource = activeTraffic?.source === "collector" ? "collector"
+    : activeTraffic?.projects ? "sample" : null;
   const activeReport = report?.scope === scope ? report : null;
   const first = Object.values(activeReport?.projects ?? {})[0];
   current.umami = activeReport?.projects ?? null;

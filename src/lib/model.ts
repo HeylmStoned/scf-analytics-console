@@ -3,7 +3,7 @@ export const RANGES = ["24h", "7d", "30d", "90d"] as const;
 export type RangeKey = (typeof RANGES)[number];
 
 export const API_METRICS_NOTICE =
-  "API metrics are simulated in this POC. Live API metrics will be introduced when the OpenTelemetry Protocol (OTLP) collector is implemented.";
+  "API route, status, and latency from the OTLP collector when Prism dual-exports. Falls back to sample fixtures if the collector is empty or unreachable.";
 export const SNIPPET =
   '<script defer src="https://s.example/s/v1.0.0/s.js" data-website-id="SITE_ID" integrity="sha384-..." crossorigin="anonymous"></script>';
 
@@ -187,6 +187,7 @@ export type AppState = {
   keyScope: "global" | "tenant";
   keyTenant: string;
   apiMetrics: Record<string, ApiFixture> | null;
+  apiSource: "collector" | "sample" | null;
   umami: Record<string, LiveProject> | null;
   umamiLabels: string[] | null;
   umamiWhen: string[] | null;
@@ -415,6 +416,7 @@ export function createState(umamiSites: UmamiDirectory | null): AppState {
     keyScope: "global",
     keyTenant: "alpha",
     apiMetrics: null,
+    apiSource: null,
     umami: null,
     umamiLabels: null,
     umamiWhen: null,
