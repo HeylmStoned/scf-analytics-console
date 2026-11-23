@@ -34,7 +34,7 @@ export function Console({ introduction, umamiSites }: {
 }) {
   const state = useRef<AppState>(createState(umamiSites));
   const [report, setReport] = useState<UmamiResult | null>(null);
-  const [traffic, setTraffic] = useState<{ scope: string; projects?: Record<string, ApiFixture>; source?: string; error?: string } | null>(null);
+  const [traffic, setTraffic] = useState<{ scope: string; projects?: Record<string, ApiFixture>; source?: string; liveIds?: string[]; error?: string } | null>(null);
   const [, setTick] = useState(0);
   const [booting, setBooting] = useState(true);
   const [tenantPicker, setTenantPicker] = useState(false);
@@ -54,6 +54,7 @@ export function Console({ introduction, umamiSites }: {
     activeTraffic?.source === "collector" || activeTraffic?.source === "mixed" || activeTraffic?.source === "sample"
       ? activeTraffic.source
       : activeTraffic?.projects ? "sample" : null;
+  current.apiLiveIds = Array.isArray(activeTraffic?.liveIds) ? activeTraffic.liveIds : [];
   const activeReport = report?.scope === scope ? report : null;
   const first = Object.values(activeReport?.projects ?? {})[0];
   current.umami = activeReport?.projects ?? null;
@@ -91,8 +92,15 @@ export function Console({ introduction, umamiSites }: {
         if (!controller.signal.aborted) setTraffic({ scope: trafficScope, error: "API metrics are temporarily unavailable." });
         return;
       }
-      const body = await response.json() as { projects: Record<string, ApiFixture>; source?: string };
-      if (!controller.signal.aborted) setTraffic({ scope: trafficScope, projects: body.projects, source: body.source });
+      const body = await response.json() as { projects: Record<string, ApiFixture>; source?: string; liveIds?: string[] };
+      if (!controller.signal.aborted) {
+        setTraffic({
+          scope: trafficScope,
+          projects: body.projects,
+          source: body.source,
+          liveIds: Array.isArray(body.liveIds) ? body.liveIds : [],
+        });
+      }
     }).catch(() => {
       if (!controller.signal.aborted) setTraffic({ scope: trafficScope, error: "API metrics are temporarily unavailable." });
     });

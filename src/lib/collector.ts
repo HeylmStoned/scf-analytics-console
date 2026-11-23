@@ -32,6 +32,7 @@ export function fixturesFromCollectorRows(rows: CollectorRow[]): Record<string, 
         requests: 0,
         errors: total > 0 ? errors / total : 0,
       },
+      live: true,
       api: tenantRows
         .slice()
         .sort((a, b) => b.count - a.count)

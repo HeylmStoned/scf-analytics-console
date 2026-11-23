@@ -66,6 +66,8 @@ export type ApiFixture = {
   apiRequests: number;
   delta: { requests: number; errors: number };
   api: { service: string; route: string; status: number; share: number; p50: number; p95: number }[];
+  /** True when rows come from the OTLP collector rather than demo fixtures. */
+  live?: boolean;
 };
 export type SiteStats = {
   id: string;
@@ -188,6 +190,7 @@ export type AppState = {
   keyTenant: string;
   apiMetrics: Record<string, ApiFixture> | null;
   apiSource: "collector" | "sample" | "mixed" | null;
+  apiLiveIds: string[];
   umami: Record<string, LiveProject> | null;
   umamiLabels: string[] | null;
   umamiWhen: string[] | null;
@@ -417,6 +420,7 @@ export function createState(umamiSites: UmamiDirectory | null): AppState {
     keyTenant: "alpha",
     apiMetrics: null,
     apiSource: null,
+    apiLiveIds: [],
     umami: null,
     umamiLabels: null,
     umamiWhen: null,
@@ -512,9 +516,11 @@ export function stats(state: AppState, id: string, range: RangeKey = state.range
   let views = pages.reduce((total, page) => total + page.views, 0);
   let pageRows: PageRow[] = pages;
   const apiFixture = isPublic(state) ? undefined : state.apiMetrics?.[id];
+  const apiLive = Boolean(apiFixture?.live || state.apiLiveIds.includes(id));
   let api: ApiRow[] = apiFixture?.api.map((row) => {
     const key = row.service + "|" + row.route + "|" + row.status;
-    return { ...row, tenantId: id, count: Math.round(row.share * Math.round(apiFixture.apiRequests * scale)) + (extra.api[key] || 0) };
+    const base = apiLive ? apiFixture.apiRequests : Math.round(apiFixture.apiRequests * scale);
+    return { ...row, tenantId: id, count: Math.round(row.share * base) + (extra.api[key] || 0) };
   }) ?? [];
   if (streamOff(state, id, "web", range)) {
     views = 0;

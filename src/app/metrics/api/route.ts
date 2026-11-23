@@ -39,10 +39,10 @@ export async function GET(request: Request) {
       .map((id) => [id, catalog[id]]),
   );
   const selected = Object.keys(projects);
-  const liveSelected = selected.filter((id) => liveIds.has(id)).length;
+  const liveSelected = selected.filter((id) => liveIds.has(id));
   const source =
-    liveSelected === 0 ? "sample"
-    : liveSelected === selected.length ? "collector"
+    liveSelected.length === 0 ? "sample"
+    : liveSelected.length === selected.length ? "collector"
     : "mixed";
-  return Response.json({ source, projects });
+  return Response.json({ source, liveIds: liveSelected, projects });
 }
