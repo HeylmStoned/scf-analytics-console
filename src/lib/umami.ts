@@ -204,12 +204,12 @@ async function discoverUmami(env: UmamiEnv) {
     properties.set(websiteId.trim(), { name: name || domain, domain, hostname: host });
   }
 
-  const trackerDomains = env.UMAMI_TRACKER_DOMAINS?.split(",").map(hostname).filter(Boolean);
-  const demoDomains = trackerDomains?.length ? trackerDomains : [UMAMI_PROJECT_DOMAINS.alpha, "scf-console-production.up.railway.app"];
   // Keep established IDs for the demo roster and sample API fixtures.
+  // Do not reuse UMAMI_TRACKER_DOMAINS here — that is only for the console's own
+  // browser tracker and would steal the alpha alias from the Umami POC property.
   const aliases = new Map<string, string>();
   const candidates = [
-    ["alpha", demoDomains],
+    ["alpha", [UMAMI_PROJECT_DOMAINS.alpha]],
     ["beta", [UMAMI_PROJECT_DOMAINS.beta]],
     ["lend", ["app.lend.xyz", UMAMI_PROJECT_DOMAINS.lend]],
   ] as const;
