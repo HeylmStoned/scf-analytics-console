@@ -31,7 +31,7 @@ The welcome page explains the demo and links to the project GitBook in its initi
 | --- | --- |
 | **Public** | Compare aggregate web totals for listed projects with recorded traffic. |
 | **SCF** | Compare active sites in **Projects** and review onboarding and listing in **SCF managing**. **Data & privacy** demonstrates erasure. **Export data** downloads JSON, scoped to the selected project when a project filter is applied in **API**. |
-| **Tenant** | Review the selected project's web and sample API metrics. **Export data from your project** exports only that project's analytics. |
+| **Tenant** | Review the selected project's web and API metrics (live from the OTLP collector when available). **Export data from your project** exports only that project's analytics. |
 
 Projects appear in analytics, comparisons, and the Tenant selector after Umami records their first pageview. Once eligible, a site stays visible even when the selected reporting period has zero pageviews. Project tables display the names and domains registered in Umami.
 
@@ -44,7 +44,8 @@ Project icons use locally served copies of the Prismfi.cc and Lend.xyz favicons.
 ## Data sources and privacy
 
 - **Live web** comes from Umami. The Public **Web activity** chart shows totals for the selected period. SCF and Tenant can view a time series when available and switch between Top pages, Countries, Referrers, Devices, Browsers, and Operating systems in **Web**. The Countries tab includes a zoomable map you can drag.
-- **Sample API** uses deterministic fixtures for request counts, HTTP statuses, normalized routes, and latency. The **Projects → Routes** table labels its API data as simulated. The planned OpenTelemetry Protocol (OTLP) collector will provide live API metrics when implemented.
+- **Live API** comes from the Pulse OTLP collector when `OTLP_COLLECTOR_URL` and `OTLP_OPERATOR_TOKEN` are set and Prism (or another tenant) dual-exports spans. The console labels **Live**, **Sample**, or **Live + Sample** from collector coverage for the selected projects.
+- **Sample API** fixtures remain as fallback when the collector is empty or unreachable.
 - Public receives only aggregate web totals. Geographic reporting in SCF and Tenant is limited to country-level aggregates. Tenant views and exports use the selected project's scope. These perspectives are open to reviewers for the POC.
 - Reports show a loading state before Umami responds. When a report is unavailable, the console clearly labels any sample figures it displays. Overview distinguishes live, sample, and mixed figures.
 
@@ -82,6 +83,8 @@ Copy [`.env.example`](.env.example) to `.env.local` and fill in the settings for
 | `UMAMI_URL` | Base URL for self-hosted username/password authentication |
 | `UMAMI_USER` | Self-hosted account name. Defaults to `admin`. |
 | `UMAMI_PASSWORD` | Self-hosted account password |
+| `OTLP_COLLECTOR_URL` | Base URL of the Pulse OTLP collector (no trailing slash) |
+| `OTLP_OPERATOR_TOKEN` | Operator bearer token for `GET /metrics/api` |
 
 The server discovers Umami properties through `GET /websites` with the configured credentials. Project website IDs and the Public project list are resolved automatically. Use credentials scoped to websites intended for this demo.
 
@@ -111,7 +114,8 @@ Grant the server-side Umami credentials access to the deployment’s website pro
 | [`src/lib/model.ts`](src/lib/model.ts) | Demo projects, metric fixtures, and scope calculations |
 | [`src/lib/umami.ts`](src/lib/umami.ts) | Umami property discovery, first-pageview checks, and metric queries |
 | [`src/app/api/umami/route.ts`](src/app/api/umami/route.ts) | Server-side endpoint for Umami dashboard metrics |
-| [`src/app/metrics/api/route.ts`](src/app/metrics/api/route.ts) | Sample API metrics for the selected demo perspective |
+| [`src/app/metrics/api/route.ts`](src/app/metrics/api/route.ts) | Live or sample API metrics for the selected demo perspective |
+| [`src/lib/collector.ts`](src/lib/collector.ts) | OTLP collector client for route/status/latency aggregates |
 | [`next.config.ts`](next.config.ts) | Rewrites that connect the console to the hosted demo worker |
 
 ## Development checks
