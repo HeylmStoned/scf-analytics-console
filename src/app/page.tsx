@@ -25,7 +25,7 @@ export default async function Page() {
             Stellar projects appear in the analytics dashboards once Umami records their first pageview.
           </p>
           <p>
-            <strong>Simulated in the demo.</strong> {API_METRICS_NOTICE} Enrollment, keys, and data
+            <strong>API metrics.</strong> {API_METRICS_NOTICE} Enrollment, keys, and data
             erasure demonstrate the proposed workflows.
           </p>
           <p>
