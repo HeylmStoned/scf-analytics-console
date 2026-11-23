@@ -25,12 +25,12 @@ export function fixturesFromCollectorRows(rows: CollectorRow[]): Record<string, 
   const out: Record<string, ApiFixture> = {};
   for (const [tenantId, tenantRows] of byTenant) {
     const total = tenantRows.reduce((sum, row) => sum + row.count, 0);
-    const errors = tenantRows.filter((row) => row.statusCode >= 400).reduce((sum, row) => sum + row.count, 0);
     out[tenantId] = {
       apiRequests: total,
+      // Prior-period deltas are unknown for the in-memory POC collector.
       delta: {
         requests: 0,
-        errors: total > 0 ? errors / total : 0,
+        errors: 0,
       },
       live: true,
       api: tenantRows

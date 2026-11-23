@@ -557,7 +557,12 @@ export function stats(state: AppState, id: string, range: RangeKey = state.range
     devices: shareRows(profile.devices, visitors),
     browsers: shareRows(profile.browsers, visitors),
     os: shareRows(profile.os, visitors),
-    delta: { ...profile.delta, requests: apiFixture?.delta.requests ?? 0, errors: apiFixture?.delta.errors ?? 0 },
+    delta: {
+      ...profile.delta,
+      // Live collector rows have no prior window yet — keep zeros so the UI shows "—"/0%, not a fake rate.
+      requests: apiLive ? 0 : (apiFixture?.delta.requests ?? 0),
+      errors: apiLive ? 0 : (apiFixture?.delta.errors ?? 0),
+    },
   };
   const live = range === state.range ? state.umami?.[id] : undefined;
   if (!live) return built;

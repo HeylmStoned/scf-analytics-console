@@ -45,8 +45,9 @@ import {
   type RangeKey,
 } from "@/lib/model";
 
-function Change({ value, goodWhenUp, range }: { value: number; goodWhenUp: boolean; range: RangeKey }) {
-  if (!Number.isFinite(value) || Math.abs(value) < 0.0005) return <span className="quiet">Selected range</span>;
+function Change({ value, goodWhenUp, range }: { value: number | null | undefined; goodWhenUp: boolean; range: RangeKey }) {
+  if (value == null || !Number.isFinite(value)) return <span className="quiet">—</span>;
+  if (Math.abs(value) < 0.0005) return <span className="quiet">0% vs {PRIOR[range]}</span>;
   const up = value >= 0;
   const good = goodWhenUp ? up : !up;
   return (
@@ -1402,8 +1403,8 @@ export function Stage({ state, bump, onOpen }: {
     return (
       <>
         <section className="kpis">
-          <Kpi label="API requests" value={num(data.requests)} hint={<Change value={data.delta.requests} goodWhenUp range={state.range} />} badge={apiScopeBadge(state, ids)} />
-          <Kpi label="Error rate" value={pct(data.errorRate)} hint={<Change value={data.delta.errors} goodWhenUp={false} range={state.range} />} badge={apiScopeBadge(state, ids)} />
+          <Kpi label="API requests" value={num(data.requests)} hint={<Change value={ids.every((id) => apiProjectSource(state, id) === "Live") ? null : data.delta.requests} goodWhenUp range={state.range} />} badge={apiScopeBadge(state, ids)} />
+          <Kpi label="Error rate" value={pct(data.errorRate)} hint={<Change value={ids.every((id) => apiProjectSource(state, id) === "Live") ? null : data.delta.errors} goodWhenUp={false} range={state.range} />} badge={apiScopeBadge(state, ids)} />
           <Kpi label="p50" value={ms(data.p50)} hint="Bucket ceiling" badge={apiScopeBadge(state, ids)} />
           <Kpi label="p95" value={ms(data.p95)} hint="Bucket ceiling" badge={apiScopeBadge(state, ids)} />
         </section>
@@ -1834,7 +1835,11 @@ function Manage({ state, bump }: { state: AppState; bump: () => void }) {
                       <td className="mono">{row.umamiStatus}</td>
                       <td className="num">{site ? num(site.visitors) : "—"}</td>
                       <td className="num">{site ? num(site.views) : "—"}</td>
-                      <td className="num">{site && state.apiMetrics?.[row.id] ? num(site.requests) : "—"}</td>
+                      <td className="num">
+                        {site && (state.apiMetrics?.[row.id]?.live || state.apiLiveIds.includes(row.id))
+                          ? num(site.requests)
+                          : "—"}
+                      </td>
                       <td>
                         <span className={"pill " + pill[0]}>{pill[1]}</span>
                       </td>

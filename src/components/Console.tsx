@@ -467,6 +467,7 @@ export function Console({ introduction, umamiSites }: {
         <nav aria-label="Sections">
           <p className="nav-group">Project</p>
           <NavButton current={current} id="overview" bump={bump} icon={<IconOverview />}>Overview</NavButton>
+          {operator ? <NavButton current={current} id="manage" bump={bump} icon={<IconManage />}>SCF managing</NavButton> : null}
           <NavButton current={current} id="roadmap" bump={bump} icon={<IconRoadmap />}>Roadmap</NavButton>
           <a className="nav-link" href="https://scf.gitbook.io/scf-docs-1" target="_blank" rel="noreferrer">
             <span className="nav-label"><IconBook />GitBook</span>
@@ -482,7 +483,6 @@ export function Console({ introduction, umamiSites }: {
             </>
           ) : null}
           {!publicMode ? <p className="nav-group">Ops</p> : null}
-          {operator ? <NavButton current={current} id="manage" bump={bump} icon={<IconManage />}>SCF managing</NavButton> : null}
           {!publicMode ? <NavButton current={current} id="privacy" bump={bump} icon={<IconPrivacy />}>Data & privacy</NavButton> : null}
         </nav>
         <div className="promo">
