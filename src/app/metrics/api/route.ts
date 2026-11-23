@@ -15,17 +15,17 @@ export async function GET(request: Request) {
     return Response.json({ error: "Invalid demo project" }, { status: 400 });
   }
 
-  let source: "collector" | "sample" = "sample";
   let catalog = API_FIXTURES;
+  let liveIds = new Set<string>();
   try {
     const live = await fetchCollectorApiMetrics(process.env);
     if (live && Object.keys(live).length) {
+      liveIds = new Set(Object.keys(live));
       catalog = { ...API_FIXTURES, ...live };
-      source = "collector";
     }
   } catch {
     catalog = API_FIXTURES;
-    source = "sample";
+    liveIds = new Set();
   }
 
   const candidates = mode === "tenant" && tenant
@@ -38,5 +38,11 @@ export async function GET(request: Request) {
       .filter((id) => catalog[id])
       .map((id) => [id, catalog[id]]),
   );
+  const selected = Object.keys(projects);
+  const liveSelected = selected.filter((id) => liveIds.has(id)).length;
+  const source =
+    liveSelected === 0 ? "sample"
+    : liveSelected === selected.length ? "collector"
+    : "mixed";
   return Response.json({ source, projects });
 }

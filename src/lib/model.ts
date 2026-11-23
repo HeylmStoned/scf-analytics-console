@@ -187,7 +187,7 @@ export type AppState = {
   keyScope: "global" | "tenant";
   keyTenant: string;
   apiMetrics: Record<string, ApiFixture> | null;
-  apiSource: "collector" | "sample" | null;
+  apiSource: "collector" | "sample" | "mixed" | null;
   umami: Record<string, LiveProject> | null;
   umamiLabels: string[] | null;
   umamiWhen: string[] | null;

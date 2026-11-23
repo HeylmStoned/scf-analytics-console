@@ -61,12 +61,18 @@ function Change({ value, goodWhenUp, range }: { value: number; goodWhenUp: boole
 }
 
 function SourceBadge({ source }: { source: string }) {
-  return <span className={"kpi-badge" + (source === "Live" || source === "Umami" || source === "Live data" ? " live" : "")}>{source}</span>;
+  const live = source === "Live" || source === "Umami" || source === "Live data" || source.startsWith("Live");
+  return <span className={"kpi-badge" + (live ? " live" : "")}>{source}</span>;
 }
 
 function apiBadge(state: AppState, long = false) {
   if (state.apiSource === "collector") return long ? "Live data" : "Live";
+  if (state.apiSource === "mixed") return long ? "Live + sample" : "Live + Sample";
   return long ? "Sample data" : "Sample";
+}
+
+function apiBadgeLive(state: AppState) {
+  return state.apiSource === "collector" || state.apiSource === "mixed";
 }
 
 function Kpi({
@@ -174,8 +180,10 @@ function Freshness({ state }: { state: AppState }) {
       {showSource ? <span className={source === "Live" ? "live" : ""}>{source === "Live"
         ? "Web · Umami synced" : source === "Sample" ? "Web · sample" : "Web · live and sample"}</span> : null}
       {state.view === "overview" && !isPublic(state) && state.apiMetrics ? (
-        <span className={state.apiSource === "collector" ? "live" : ""}>
-          {state.apiSource === "collector" ? "API · live collector" : "API · sample"}
+        <span className={apiBadgeLive(state) ? "live" : ""}>
+          {state.apiSource === "collector" ? "API · live collector"
+            : state.apiSource === "mixed" ? "API · live and sample"
+            : "API · sample"}
         </span>
       ) : null}
       {alternateProjects.map((id) => <span key={id}>{nameOf(id, state.umamiSites)} · Umami data from a different domain</span>)}
@@ -304,7 +312,7 @@ function ApiCurve({ state, ids, bump }: { state: AppState; ids: string[]; bump: 
           <h2>API volume</h2>
           <p>Requests per {state.range === "24h" ? "hour" : "day"} · pin a day to inspect.</p>
         </div>
-        <span className={"badge" + (state.apiSource === "collector" ? " live" : "")}>{apiBadge(state, true)}</span>
+        <span className={"badge" + ((apiBadgeLive(state) ? " live" : ""))}>{apiBadge(state, true)}</span>
       </div>
       <GroupedChart series={series} label="API requests" {...chartProps(state, series)} onPin={pinDay(state, bump, "api")} />
     </section>
@@ -1055,7 +1063,7 @@ function ApiDetail({
             Focus status {focus.status} · {pct(share)} of project API volume · {windowLabel(state)}
           </p>
         </div>
-        <span className={"badge" + (state.apiSource === "collector" ? " live" : "")}>{apiBadge(state)}</span>
+        <span className={"badge" + ((apiBadgeLive(state) ? " live" : ""))}>{apiBadge(state)}</span>
       </div>
       <div className="detail-kpis">
         <div>
@@ -1392,7 +1400,7 @@ export function Stage({ state, bump, onOpen }: {
                 <h2>Needs attention · 5xx</h2>
                 <p>Highest volume server errors in range.</p>
               </div>
-              <span className={"badge" + (state.apiSource === "collector" ? " live" : "")}>{apiBadge(state)}</span>
+              <span className={"badge" + ((apiBadgeLive(state) ? " live" : ""))}>{apiBadge(state)}</span>
             </div>
             {failing.length ? (
               <div className="rank-list">
@@ -1430,7 +1438,7 @@ export function Stage({ state, bump, onOpen }: {
                 <h2>Needs attention · slowest p95</h2>
                 <p>Routes with the highest latency ceiling.</p>
               </div>
-              <span className={"badge" + (state.apiSource === "collector" ? " live" : "")}>{apiBadge(state)}</span>
+              <span className={"badge" + ((apiBadgeLive(state) ? " live" : ""))}>{apiBadge(state)}</span>
             </div>
             <div className="rank-list">
               {slowest.map((row) => (

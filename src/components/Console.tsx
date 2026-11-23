@@ -50,8 +50,10 @@ export function Console({ introduction, umamiSites }: {
     : "";
   const activeTraffic = traffic?.scope === trafficScope ? traffic : null;
   current.apiMetrics = activeTraffic?.projects ?? null;
-  current.apiSource = activeTraffic?.source === "collector" ? "collector"
-    : activeTraffic?.projects ? "sample" : null;
+  current.apiSource =
+    activeTraffic?.source === "collector" || activeTraffic?.source === "mixed" || activeTraffic?.source === "sample"
+      ? activeTraffic.source
+      : activeTraffic?.projects ? "sample" : null;
   const activeReport = report?.scope === scope ? report : null;
   const first = Object.values(activeReport?.projects ?? {})[0];
   current.umami = activeReport?.projects ?? null;
@@ -305,7 +307,10 @@ export function Console({ introduction, umamiSites }: {
   const ids = scopeIds(current);
   const listed = ids.length;
   const overviewSource = view === "overview" && webMetricSource(current, ids) === "Live + Sample";
-  const apiSource = activeTraffic?.source === "collector" ? "live" : "sample";
+  const apiSource =
+    activeTraffic?.source === "collector" ? "live"
+    : activeTraffic?.source === "mixed" ? "mixed"
+    : "sample";
   const showApiSource = !publicMode && !showReportStatus && Boolean(current.apiMetrics)
     && (view === "overview" || view === "compare" || view === "manage");
   const showRange = RANGE_VIEWS.has(current.view);
@@ -499,8 +504,8 @@ export function Console({ introduction, umamiSites }: {
             <div className="context-strip">
               <div className="context-tools">
                 {view === "api" ? (
-                  <span className={"status-pill" + (apiSource === "live" ? " live" : " sample")}>
-                    {apiSource === "live" ? "Live API" : "Sample API"}
+                  <span className={"status-pill" + (apiSource === "sample" ? " sample" : " live")}>
+                    {apiSource === "live" ? "Live API" : apiSource === "mixed" ? "Live + Sample API" : "Sample API"}
                   </span>
                 ) : (
                   <span className={"status-pill" + (current.umami && !overviewSource ? " live" : "")}>
@@ -512,8 +517,8 @@ export function Console({ introduction, umamiSites }: {
                   </span>
                 )}
                 {showApiSource ? (
-                  <span className={"status-pill" + (apiSource === "live" ? " live" : " sample")}>
-                    {apiSource === "live" ? "Live API" : "Sample API"}
+                  <span className={"status-pill" + (apiSource === "sample" ? " sample" : " live")}>
+                    {apiSource === "live" ? "Live API" : apiSource === "mixed" ? "Live + Sample API" : "Sample API"}
                   </span>
                 ) : null}
                 {showRange ? (
