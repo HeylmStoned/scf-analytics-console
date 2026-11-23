@@ -34,7 +34,7 @@ export function Console({ introduction, umamiSites }: {
 }) {
   const state = useRef<AppState>(createState(umamiSites));
   const [report, setReport] = useState<UmamiResult | null>(null);
-  const [traffic, setTraffic] = useState<{ scope: string; projects?: Record<string, ApiFixture>; error?: string } | null>(null);
+  const [traffic, setTraffic] = useState<{ scope: string; projects?: Record<string, ApiFixture>; source?: string; error?: string } | null>(null);
   const [, setTick] = useState(0);
   const [booting, setBooting] = useState(true);
   const [tenantPicker, setTenantPicker] = useState(false);
@@ -87,8 +87,8 @@ export function Console({ introduction, umamiSites }: {
         if (!controller.signal.aborted) setTraffic({ scope: trafficScope, error: "API metrics are temporarily unavailable." });
         return;
       }
-      const { projects } = await response.json() as { projects: Record<string, ApiFixture> };
-      if (!controller.signal.aborted) setTraffic({ scope: trafficScope, projects });
+      const body = await response.json() as { projects: Record<string, ApiFixture>; source?: string };
+      if (!controller.signal.aborted) setTraffic({ scope: trafficScope, projects: body.projects, source: body.source });
     }).catch(() => {
       if (!controller.signal.aborted) setTraffic({ scope: trafficScope, error: "API metrics are temporarily unavailable." });
     });
@@ -303,6 +303,7 @@ export function Console({ introduction, umamiSites }: {
   const ids = scopeIds(current);
   const listed = ids.length;
   const overviewSource = view === "overview" && webMetricSource(current, ids) === "Live + Sample";
+  const apiSource = activeTraffic?.source === "collector" ? "live" : "sample";
   const showApiSource = !publicMode && !showReportStatus && Boolean(current.apiMetrics)
     && (view === "overview" || view === "compare" || view === "manage");
   const showRange = RANGE_VIEWS.has(current.view);
@@ -496,7 +497,9 @@ export function Console({ introduction, umamiSites }: {
             <div className="context-strip">
               <div className="context-tools">
                 {view === "api" ? (
-                  <span className="status-pill sample">Sample API</span>
+                  <span className={"status-pill" + (apiSource === "live" ? " live" : " sample")}>
+                    {apiSource === "live" ? "Live API" : "Sample API"}
+                  </span>
                 ) : (
                   <span className={"status-pill" + (current.umami && !overviewSource ? " live" : "")}>
                     {showReportStatus
@@ -506,7 +509,11 @@ export function Console({ introduction, umamiSites }: {
                       : current.umami ? "Live web" : "Sample data"}
                   </span>
                 )}
-                {showApiSource ? <span className="status-pill sample">Sample API</span> : null}
+                {showApiSource ? (
+                  <span className={"status-pill" + (apiSource === "live" ? " live" : " sample")}>
+                    {apiSource === "live" ? "Live API" : "Sample API"}
+                  </span>
+                ) : null}
                 {showRange ? (
                   <div className="range-wrap">
                     <span className="window">{showReportStatus ? RANGE_LABELS[current.range] : windowLabel(current)}</span>

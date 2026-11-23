@@ -1,3 +1,4 @@
+import { fetchCollectorApiMetrics } from "@/lib/collector";
 import { API_FIXTURES } from "@/lib/api-fixtures";
 import { isAnalyticsProjectId } from "@/lib/model";
 import { activeUmamiProjects } from "@/lib/umami";
@@ -13,10 +14,29 @@ export async function GET(request: Request) {
   if (mode === "tenant" && (!tenant || !isAnalyticsProjectId(tenant))) {
     return Response.json({ error: "Invalid demo project" }, { status: 400 });
   }
+
+  let source: "collector" | "sample" = "sample";
+  let catalog = API_FIXTURES;
+  try {
+    const live = await fetchCollectorApiMetrics(process.env);
+    if (live && Object.keys(live).length) {
+      catalog = { ...API_FIXTURES, ...live };
+      source = "collector";
+    }
+  } catch {
+    catalog = API_FIXTURES;
+    source = "sample";
+  }
+
   const candidates = mode === "tenant" && tenant
-    ? Object.keys(API_FIXTURES).filter((id) => id === tenant)
-    : Object.keys(API_FIXTURES);
+    ? Object.keys(catalog).filter((id) => id === tenant)
+    : Object.keys(catalog);
   const active = candidates.length ? await activeUmamiProjects(process.env).catch(() => null) : null;
-  const projects = Object.fromEntries(candidates.filter((id) => active?.[id]).map((id) => [id, API_FIXTURES[id]]));
-  return Response.json({ source: "sample", projects });
+  const projects = Object.fromEntries(
+    candidates
+      .filter((id) => (active ? active[id] || catalog[id] : catalog[id]))
+      .filter((id) => catalog[id])
+      .map((id) => [id, catalog[id]]),
+  );
+  return Response.json({ source, projects });
 }
