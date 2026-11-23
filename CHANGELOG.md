@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.0 — 2026-11-23
+
+First tagged reviewer release of the SCF analytics console POC.
+
 ### Reviewer experience
 
 - Rendered the welcome text and project GitBook link in the initial HTML so reviewers can read them before JavaScript runs. The welcome page explains which metrics are live and which are simulated.
@@ -22,6 +26,5 @@
 - Showed period totals in the Public Web Activity chart and time series in SCF and Tenant when available.
 - Combined Top pages, Countries, Referrers, Devices, Browsers, and Operating systems into a single tabbed table. The Countries map supports zoom, drag, and selection.
 - Limited Umami's geographic requests to country-level aggregates and documented the limit in the dashboard.
-- Added distinct Live web and Sample API indicators and source labels throughout Overview. Web reports wait for Umami before rendering, and sample fallbacks are explicitly labeled.
-- Labeled routes and API metrics as simulated in Projects. The planned OpenTelemetry Protocol (OTLP) collector will provide live metrics.
+- Wired live API metrics from the hosted OTLP collector, with per-project **Live** / **Sample** labels and fixture fallback when a tenant has no collector rows.
 - Hid exports in Public. SCF can export ecosystem totals or the selected project from the API view. Tenant exports include only the selected project's metrics.
